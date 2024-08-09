@@ -5,10 +5,15 @@ hlsAllowOrigin: "*"
 hlsTrustedProxies:
   - 0.0.0.0/0
 
+# HLS configuration to be more tolerant of lag
+hlsFragmentDuration: 6s  # Increase fragment duration
+hlsPlaylistLength: 60s   # Increase playlist length
+hlsSegmentCount: 10      # Increase segment count
+
 # TODO: Implement WebRTC as an alternative stream source
 webrtc: no
 
 paths:
   proxied:
-    source: rtsp://username:password@192.168.0.123:554/stream1
-    #sourceOnDemand: yes
+    # Enter your RTSP stream URL here
+    source: rtsp://username:pass@1.2.3.4:554/stream1
