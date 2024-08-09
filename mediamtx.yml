@@ -1,0 +1,14 @@
+# Enable reading streams with the HLS protocol.
+hls: yes
+hlsAddress: :8888
+hlsAllowOrigin: "*"
+hlsTrustedProxies:
+  - 0.0.0.0/0
+
+# TODO: Implement WebRTC as an alternative stream source
+webrtc: no
+
+paths:
+  proxied:
+    source: rtsp://username:password@192.168.0.123:554/stream1
+    #sourceOnDemand: yes

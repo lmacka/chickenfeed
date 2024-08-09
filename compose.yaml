@@ -1,0 +1,23 @@
+services:
+  nginx:
+    image: nginx:latest
+    ports:
+      - "24665:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./static:/usr/share/nginx/html:ro
+    networks:
+      - videofeed
+
+  rtsp-proxy:
+    image: bluenviron/mediamtx:latest
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+    networks:
+      - videofeed
+
+networks:
+  videofeed:
+    driver: bridge
