@@ -1,0 +1,7 @@
+# Ignore auto-generated swag config
+!/config/www
+!/config/nginx/site-confs
+/config
+
+# Don't accidentally commit your secrets
+mediamtx.yml
