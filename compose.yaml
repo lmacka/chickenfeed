@@ -32,7 +32,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./chicky-control:/usr/src/app:ro
+      - ./chicky-control:/usr/src/app:rw
     networks:
       - videofeed
 
