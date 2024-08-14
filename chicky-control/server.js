@@ -8,7 +8,7 @@ app.use(express.static('public')); // Serve static files from the 'public' direc
 
 app.post('/give-treat', async (req, res) => {
   try {
-    const response = await fetch('http://127.0.0.1:3080/cycle', {
+    const response = await fetch('http://localhost:3080/cycle', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
