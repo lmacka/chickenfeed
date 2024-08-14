@@ -27,6 +27,15 @@ services:
     networks:
       - videofeed
 
+  node-app:
+    build: ./chicky-control
+    ports:
+      - "3070:3000"
+    volumes:
+      - ./chicky-control:/usr/src/app
+    networks:
+      - videofeed
+
 networks:
   videofeed:
     driver: bridge
