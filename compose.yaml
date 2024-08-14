@@ -27,12 +27,12 @@ services:
     networks:
       - videofeed
 
-  node-app:
+  chicky-control:
     build: ./chicky-control
     ports:
-      - "3070:3000"
+      - "3000:3000"
     volumes:
-      - ./chicky-control:/usr/src/app
+      - ./chicky-control:/usr/src/app:ro
     networks:
       - videofeed
 
