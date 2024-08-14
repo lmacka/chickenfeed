@@ -1,6 +1,8 @@
 # Ignore auto-generated swag config
 !/config/www
 !/config/www/*
+!/config/proxy-confs
+!/config/proxy-confs/*
 !/config/nginx/site-confs
 /config
 
