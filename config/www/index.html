@@ -130,14 +130,32 @@
           <p>You are watching a real-time feed of baby <a href="https://forestry.com/animals/birds/belgian-duccle-chicken/">Belgian d'Uccle</a> chickens.  Why?  Why not!</p>
           <p>Actually, I'm a just a geeky chicken breeder who uses them as an excuse to learn new technologies and try out new stuff.  Don't worry, I asked them first and they don't mind the invasion of privacy.</p>
           <p>The camera will rotate periodically during the day to give you a good look around. Audio has been disabled, but just imagine lots of cheeping and you're set.</p>
-          <p>These chicks are all for sale and will be at the monthly <a href="https://www.facebook.com/share/g/Vz9Vm4YeLeVP4SRR/?mibextid=adzO7l">Perma Poultry market</a> in Beerburrum, QLD.</p>
           <p>For the technically inclined, the method to this madness is on <a href="https://github.com/lmacka/chickenfeed">Github</a>.</p>
+          <button id="treat-button">Give them a treat</button>
         `;
         document.body.appendChild(floatingWindow);
 
         const closeFloatingBtn = floatingWindow.querySelector('.close-btn');
         closeFloatingBtn.addEventListener('click', () => {
           document.body.removeChild(floatingWindow);
+        });
+
+        const treatButton = floatingWindow.querySelector('#treat-button');
+        treatButton.addEventListener('click', () => {
+          fetch('/give-treat', {
+            method: 'POST'
+          })
+          .then(response => {
+            if (response.ok) {
+              alert('Treat given to the chickens!');
+            } else {
+              alert('Failed to give treat.');
+            }
+          })
+          .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to give treat.');
+          });
         });
       });
     });
