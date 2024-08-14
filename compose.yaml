@@ -15,6 +15,7 @@ services:
       - "80:80"
     volumes:
       - ./config:/config
+      - ./config/proxy-confs:/config/nginx/proxy-confs
     networks:
       - videofeed
 

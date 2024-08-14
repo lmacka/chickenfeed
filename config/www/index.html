@@ -142,7 +142,7 @@
 
         const treatButton = floatingWindow.querySelector('#treat-button');
         treatButton.addEventListener('click', () => {
-          fetch('/give-treat', {
+          fetch('/api/give-treat', {
             method: 'POST'
           })
           .then(response => {
