@@ -34,8 +34,7 @@ services:
       - "3000:3000"
     volumes:
       - ./chicky-control:/usr/src/app:rw
-    networks:
-      - videofeed
+    network_mode: host
 
 networks:
   videofeed:
