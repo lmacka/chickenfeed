@@ -1,6 +1,12 @@
 # Don't accidentally commit your secrets
 mediamtx.yml
 
+# Exclude swag defconf
+config/
+!config/nginx/site-confs/default.conf
+!config/nginx/proxy-confs/api.subfolder.conf
+!config/www
+
 # Node.js
 node_modules/
 npm-debug.log
