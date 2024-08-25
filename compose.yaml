@@ -31,4 +31,6 @@ services:
       - "3000:3000"
     volumes:
       - ./chicky-control:/usr/src/app:rw
+      - ./config/keys/cert.key:/keys/cert.key:ro
+      - ./config/keys/cert.crt:/keys/cert.crt:ro
     network_mode: host
