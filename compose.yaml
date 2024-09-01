@@ -7,6 +7,7 @@ services:
       - ONLY_SUBDOMAINS=false
       - STAGING=false
       - SUBDOMAINS=www
+      - EXTRA_DOMAINS=chook.cam
       - PUID=1000
       - PGID=1000
       - TZ=Australia/Brisbane

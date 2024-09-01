@@ -99,7 +99,7 @@
 <body>
   <div class="popup">
     <button class="close-btn">&times;</button>
-    <p id="explanation-link" style="cursor: pointer; color: black;">Ummm, what is this?</p>
+    <p id="explanation-link" style="cursor: pointer; color: black;">But why?</p>
   </div>
   <video id="video" muted autoplay controls playsinline></video>
 
@@ -141,11 +141,15 @@
       }
     };
 
-    // Alt + 8 to toggle treat container. Secret chookie goodies.
-    document.addEventListener('keydown', (event) => {
-      if (event.altKey && event.key === '8') {
-        const treatContainer = document.getElementById('treat-container');
-        treatContainer.classList.toggle('hidden');
+    // Secret chookie goodies. Insanity pays.
+    let madnessClickCount = 0;
+    document.addEventListener('click', (event) => {
+      if (event.target.id === 'madness') {
+        madnessClickCount++;
+        if (madnessClickCount >= 10) {
+          const treatContainer = document.getElementById('treat-container');
+          treatContainer.classList.remove('hidden');
+        }
       }
     });
 
@@ -164,16 +168,17 @@
         floatingWindow.innerHTML = `
           <button class="close-btn">&times;</button>
           <p>You are watching a real-time feed of baby Belgian d'Uccle chickens.  Why?  Why not!</p>
-          <p>Actually, I'm a just a geeky chicken breeder who uses them as an excuse to learn new technologies and try out new stuff.  Don't worry, I asked them first and they don't mind the invasion of privacy.</p>
-          <p>The camera will rotate periodically during the day to give you a good look around. Audio has been disabled, but just imagine lots of cheeping and you're set.</p>
-          <p>For the technically inclined, the method to this madness is on <a href="https://github.com/lmacka/chickenfeed">Github</a>.</p>
+          <p>Seriously though, I breed chickens and this is a little side-quest I've been working on to develop my skills in some new programming languages and technologies.</p>
+          <p>It's also highly entertaining to watch them! The camera will rotate periodically during the day to give you a good look around.</p>
+          <p>For the technically inclined, the method to this <span id="madness">madness</span> is on <a href="https://github.com/lmacka/chickenfeed">Github</a>.</p>
 
           <div id="treat-container" class="hidden">
-            <p>Want to give the chickens a treat? Click the buttons below! Treats are topped up once a day.</p>
+            <hr>
+            <p>Want to give the chickens a treat? There's a container full of oats and mealworms just out of view...</p>
             <button id="treat-button">Give them a treat</button>
+            <button id="toggle-light">Toggle Light</button>
+            <p>Note that there's a ~10 second delay in the video; be patient!</p>
           </div>
-
-
   `;
         document.body.appendChild(floatingWindow);
 
@@ -189,16 +194,23 @@
           })
             .then(response => {
               if (response.ok) {
-                alert('Treat given to the chickens!');
+                alert('Treat dispensed!\n\nThe chickens thank you!');
               } else {
-                alert('Failed to give treat.');
+                alert('Something went wrong, or the treat machine is temporarily out of service.');
               }
             })
             .catch(error => {
               console.error('Error:', error);
-              alert('Failed to give treat.');
+              alert('Something went wrong, or the treat machine is temporarily out of service.');
             });
         });
+
+        const toggleLightButton = document.getElementById('toggle-light');
+        toggleLightButton.addEventListener('click', () => {
+          const message = JSON.stringify({ command: 'toggle-light' });
+          ws.send(message);
+        });
+
       });
     });
   </script>
