@@ -1,6 +1,9 @@
 # Chicken Feed 🐔
 
-A demo of this in action can be seen at http://onlychicks.tv
+A demo of this in action can be seen at https://chook.cam
+Note that this is still very much in alpha stages and might be turned off or broken.
+
+For other cool chook stuff, check out my door controller [here](https://github.com/lmacka/coopi).
 
 ## Problem
 Let's say you have a bunch of baby chickens and for some reason you've put a camera in their brooder.  You want to world to see your chooks, but you've only got a mediocre residential internet connection.  More than a couple of viewers and your fancy video stream will start buffering.
