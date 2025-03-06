@@ -1,5 +1,6 @@
 services:
   swag:
+    restart: always
     image: linuxserver/swag:latest
     environment:
       - URL=onlychicks.tv
@@ -19,6 +20,7 @@ services:
     network_mode: host
 
   rtsp-proxy:
+    restart: always
     image: bluenviron/mediamtx:latest
     ports:
       - "8888:8888"
@@ -27,6 +29,7 @@ services:
     network_mode: host
 
   chicky-control:
+    restart: always
     build: ./chicky-control
     ports:
       - "3000:3000"
