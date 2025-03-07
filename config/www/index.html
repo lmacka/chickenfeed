@@ -29,6 +29,93 @@
       object-fit: contain;
     }
 
+    /* PTZ Control Panel Styles */
+    #ptz-control-panel {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      background-color: rgba(0, 0, 0, 0.7);
+      border-radius: 8px;
+      padding: 10px;
+      width: 180px;
+      height: auto;
+      z-index: 100;
+      color: white;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      cursor: move;
+      user-select: none;
+      touch-action: none;
+      box-sizing: border-box;
+    }
+
+    #ptz-control-panel h3 {
+      text-align: center;
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 14px;
+      color: #fff;
+    }
+
+    .direction-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-rows: 1fr 1fr 1fr;
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+
+    .direction-btn {
+      background-color: #444;
+      border: none;
+      color: white;
+      height: 40px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s;
+    }
+
+    .direction-btn:hover {
+      background-color: #666;
+    }
+
+    .direction-btn:active {
+      background-color: #957aad;
+    }
+
+    .direction-btn svg {
+      width: 20px;
+      height: 20px;
+      fill: white;
+    }
+
+    .preset-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 5px;
+    }
+
+    .preset-btn {
+      background-color: #957aad;
+      border: none;
+      color: white;
+      padding: 8px 0;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: background-color 0.2s;
+    }
+
+    .preset-btn:hover {
+      background-color: #a98cc0;
+    }
+
+    .preset-btn:active {
+      background-color: #7d67a0;
+    }
+
     .popup {
       position: fixed;
       top: 20px;
@@ -112,6 +199,35 @@
   </div> -->
   <video id="video" muted autoplay controls playsinline></video>
 
+  <!-- PTZ Control Panel -->
+  <div id="ptz-control-panel">
+    <h3>Camera Controls</h3>
+    <div class="direction-controls">
+      <div></div>
+      <button class="direction-btn" id="ptz-up">
+        <svg viewBox="0 0 24 24"><path d="M7 14l5-5 5 5z"/></svg>
+      </button>
+      <div></div>
+      <button class="direction-btn" id="ptz-left">
+        <svg viewBox="0 0 24 24"><path d="M14 7l-5 5 5 5z"/></svg>
+      </button>
+      <div></div>
+      <button class="direction-btn" id="ptz-right">
+        <svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5z"/></svg>
+      </button>
+      <div></div>
+      <button class="direction-btn" id="ptz-down">
+        <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+      </button>
+      <div></div>
+    </div>
+    <div class="preset-controls">
+      <button class="preset-btn" id="preset-1">Preset 1</button>
+      <button class="preset-btn" id="preset-2">Preset 2</button>
+      <button class="preset-btn" id="preset-3">Preset 3</button>
+    </div>
+  </div>
+
   <div id="viewer-count">Viewers: 0</div>
   <script>
     const viewerCount = document.getElementById('viewer-count');
@@ -121,6 +237,110 @@
       const data = JSON.parse(event.data);
       viewerCount.textContent = 'Viewers: ' + data.clients;
     };
+
+    // PTZ Control Panel Draggable Functionality
+    document.addEventListener('DOMContentLoaded', () => {
+      const ptzPanel = document.getElementById('ptz-control-panel');
+      const initialHeight = ptzPanel.offsetHeight;
+      let isDragging = false;
+      let offsetX, offsetY;
+
+      // Make the panel draggable
+      ptzPanel.addEventListener('mousedown', (e) => {
+        if (e.target === ptzPanel || e.target.tagName === 'H3') {
+          isDragging = true;
+          offsetX = e.clientX - ptzPanel.getBoundingClientRect().left;
+          offsetY = e.clientY - ptzPanel.getBoundingClientRect().top;
+          ptzPanel.style.cursor = 'grabbing';
+        }
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        
+        const x = e.clientX - offsetX;
+        const y = e.clientY - offsetY;
+        
+        // Keep the panel within the viewport
+        const maxX = window.innerWidth - ptzPanel.offsetWidth;
+        const maxY = window.innerHeight - ptzPanel.offsetHeight;
+        
+        ptzPanel.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
+        ptzPanel.style.top = Math.max(0, Math.min(y, maxY)) + 'px';
+        ptzPanel.style.bottom = 'auto'; // Remove bottom positioning when dragged
+        ptzPanel.style.height = initialHeight + 'px'; // Maintain initial height
+      });
+
+      document.addEventListener('mouseup', () => {
+        isDragging = false;
+        ptzPanel.style.cursor = 'move';
+      });
+
+      // Touch support for mobile devices
+      ptzPanel.addEventListener('touchstart', (e) => {
+        if (e.target === ptzPanel || e.target.tagName === 'H3') {
+          isDragging = true;
+          offsetX = e.touches[0].clientX - ptzPanel.getBoundingClientRect().left;
+          offsetY = e.touches[0].clientY - ptzPanel.getBoundingClientRect().top;
+          e.preventDefault();
+        }
+      });
+
+      document.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        
+        const x = e.touches[0].clientX - offsetX;
+        const y = e.touches[0].clientY - offsetY;
+        
+        const maxX = window.innerWidth - ptzPanel.offsetWidth;
+        const maxY = window.innerHeight - ptzPanel.offsetHeight;
+        
+        ptzPanel.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
+        ptzPanel.style.top = Math.max(0, Math.min(y, maxY)) + 'px';
+        ptzPanel.style.bottom = 'auto'; // Remove bottom positioning when dragged
+        ptzPanel.style.height = initialHeight + 'px'; // Maintain initial height
+        e.preventDefault();
+      });
+
+      document.addEventListener('touchend', () => {
+        isDragging = false;
+      });
+
+      // PTZ Control Button Event Handlers
+      document.getElementById('ptz-up').addEventListener('click', () => {
+        sendPTZCommand('up');
+      });
+      
+      document.getElementById('ptz-down').addEventListener('click', () => {
+        sendPTZCommand('down');
+      });
+      
+      document.getElementById('ptz-left').addEventListener('click', () => {
+        sendPTZCommand('left');
+      });
+      
+      document.getElementById('ptz-right').addEventListener('click', () => {
+        sendPTZCommand('right');
+      });
+      
+      document.getElementById('preset-1').addEventListener('click', () => {
+        sendPTZCommand('preset-1');
+      });
+      
+      document.getElementById('preset-2').addEventListener('click', () => {
+        sendPTZCommand('preset-2');
+      });
+      
+      document.getElementById('preset-3').addEventListener('click', () => {
+        sendPTZCommand('preset-3');
+      });
+
+      // Function to send PTZ commands via WebSocket
+      function sendPTZCommand(command) {
+        const message = JSON.stringify({ command: 'ptz', action: command });
+        ws.send(message);
+      }
+    });
   </script>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.1.5"></script>
