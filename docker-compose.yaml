@@ -1,0 +1,79 @@
+services:
+  swag:
+    restart: always
+    image: linuxserver/swag:latest
+    environment:
+      - URL=onlychicks.tv
+      - VALIDATION=http
+      - ONLY_SUBDOMAINS=false
+      - STAGING=false
+      - SUBDOMAINS=www
+      - EXTRA_DOMAINS=chook.cam
+      - PUID=1000
+      - PGID=1000
+      - TZ=Australia/Brisbane
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./config:/config
+    network_mode: host
+
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscale
+    hostname: chickenfeed-server
+    restart: unless-stopped
+    environment:
+      - TS_AUTHKEY=
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=false
+      - TS_EXTRA_ARGS=--accept-routes=true
+    volumes:
+      - ./tailscale:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - sys_module
+    network_mode: host
+    secrets:
+      - tailscale_authkey
+
+  rtsp-proxy:
+    restart: always
+    image: bluenviron/mediamtx:latest
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+    secrets:
+      - rtsp_connection_string
+    network_mode: host
+    depends_on:
+      tailscale:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "tailscale status | grep -q 'chickenfeed-server'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  chicky-control:
+    restart: always
+    build: ./chicky-control
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./chicky-control:/usr/src/app:rw
+      - ./config/keys/cert.key:/keys/cert.key:ro
+      - ./config/keys/cert.crt:/keys/cert.crt:ro
+    network_mode: host
+
+secrets:
+  rtsp_connection_string:
+    file: ./secrets/rtsp_connection_string.txt
+  tailscale_authkey:
+    file: ./secrets/tailscale_authkey.txt
