@@ -17,7 +17,11 @@ services:
       - "80:80"
     volumes:
       - ./config:/config
+      - ./custom-cont-init.d:/custom-cont-init.d
+      - ./custom-services.d:/custom-services.d
     network_mode: host
+    cap_add:
+      - NET_ADMIN
 
   tailscale:
     image: tailscale/tailscale:latest
