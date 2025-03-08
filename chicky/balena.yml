@@ -1,0 +1,28 @@
+name: chickenfeed-pi
+type: sw.application
+description: >-
+  Raspberry Pi component of the Chickenfeed project that controls servos and lights
+assets:
+  repository:
+    type: blob.asset
+    data:
+      url: 'https://github.com/lmacka/chickenfeed'
+  logo:
+    type: blob.asset
+    data:
+      url: 'https://raw.githubusercontent.com/lmacka/chickenfeed/docs/chickenfeed.webp'
+data:
+  applicationEnvironmentVariables:
+    - REMOTE_WS_URL: 'wss://onlychicks.tv/ws/'
+    - PORT: '3000'
+    - DEBUG: 'false'
+    - SERVO1_PIN: '15'
+    - SERVO2_PIN: '14'
+  defaultDeviceType: raspberry-pi5
+  supportedDeviceTypes:
+    - raspberry-pi5
+  deviceConfiguration:
+    - BALENA_HOST_CONFIG_dtoverlay: 'pwm'
+    - BALENA_HOST_CONFIG_dtparam: 'i2c_arm=on'
+    - BALENA_HOST_CONFIG_dtparam: 'spi=on'
+version: 1.0.0 

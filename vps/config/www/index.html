@@ -275,6 +275,24 @@
       vertical-align: middle;
       display: inline-block;
     }
+
+    .icon-treat {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M12 6c1.11 0 2-.9 2-2 0-.38-.1-.73-.29-1.03L12 0l-1.71 2.97c-.19.3-.29.65-.29 1.03 0 1.1.9 2 2 2zm4.6 9.99l-1.07-1.07-1.08 1.07c-1.3 1.3-3.58 1.31-4.89 0l-1.07-1.07-1.09 1.07C6.75 16.64 5.88 17 4.96 17c-.73 0-1.4-.23-1.96-.61V21c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-4.61c-.56.38-1.23.61-1.96.61-.92 0-1.79-.36-2.44-1.01zM18 9h-5V7h-2v2H6c-1.66 0-3 1.34-3 3v1.54c0 1.08.88 1.96 1.96 1.96.52 0 1.02-.2 1.38-.57l2.14-2.13 2.13 2.13c.74.74 2.03.74 2.77 0l2.14-2.13 2.13 2.13c.37.37.86.57 1.38.57 1.08 0 1.96-.88 1.96-1.96V12C21 10.34 19.66 9 18 9z'/%3E%3C/svg%3E");
+      width: 16px;
+      height: 16px;
+      margin-right: 8px;
+      vertical-align: middle;
+      display: inline-block;
+    }
+    
+    .icon-light {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7zm2.85 11.1l-.85.6V16h-4v-2.3l-.85-.6C7.8 12.16 7 10.63 7 9c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.63-.8 3.16-2.15 4.1z'/%3E%3C/svg%3E");
+      width: 16px;
+      height: 16px;
+      margin-right: 8px;
+      vertical-align: middle;
+      display: inline-block;
+    }
   </style>
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-J5C4JZPG37"></script>
@@ -325,18 +343,39 @@
         Feeders
         <div class="cooldown-overlay" id="cooldown-3"></div>
       </button>
+      <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.3); margin: 15px 0;">
+      <button class="preset-btn" id="give-treat">
+        <span class="icon icon-treat"></span>
+        Give Treat
+        <div class="cooldown-overlay" id="cooldown-treat"></div>
+      </button>
+      <button class="preset-btn" id="toggle-light">
+        <span class="icon icon-light"></span>
+        Toggle Light
+        <div class="cooldown-overlay" id="cooldown-light"></div>
+      </button>
     </div>
   </div>
 
   <div id="viewer-count">Viewers: 0</div>
   <script>
     const viewerCount = document.getElementById('viewer-count');
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(protocol + '//' + window.location.host + '/ws/');
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      viewerCount.textContent = 'Viewers: ' + data.clients;
-    };
+    
+    // Function to update viewer count
+    function updateViewerCount() {
+      fetch('/api/visitors')
+        .then(response => response.json())
+        .then(data => {
+          viewerCount.textContent = 'Viewers: ' + (data.count || 0);
+        })
+        .catch(error => {
+          console.error('Error fetching viewer count:', error);
+        });
+    }
+    
+    // Update viewer count immediately and then every 10 seconds
+    updateViewerCount();
+    setInterval(updateViewerCount, 10000);
 
     // PTZ Control Panel Draggable Functionality
     document.addEventListener('DOMContentLoaded', () => {
@@ -351,12 +390,16 @@
       const presetButtons = {
         'preset-1': document.getElementById('preset-1'),
         'preset-2': document.getElementById('preset-2'),
-        'preset-3': document.getElementById('preset-3')
+        'preset-3': document.getElementById('preset-3'),
+        'give-treat': document.getElementById('give-treat'),
+        'toggle-light': document.getElementById('toggle-light')
       };
       const cooldownOverlays = {
         'preset-1': document.getElementById('cooldown-1'),
         'preset-2': document.getElementById('cooldown-2'),
-        'preset-3': document.getElementById('cooldown-3')
+        'preset-3': document.getElementById('cooldown-3'),
+        'give-treat': document.getElementById('cooldown-treat'),
+        'toggle-light': document.getElementById('cooldown-light')
       };
       
       // Initialize cooldown overlays
@@ -439,15 +482,7 @@
           <p>You are watching a real-time feed of baby Belgian d'Uccle chickens.  Why?  Why not!</p>
           <p>Seriously though, I breed chickens and this is a little side-quest I've been working on to develop my skills in some new programming languages and technologies.</p>
           <p>It's also highly entertaining to watch them! The camera will rotate periodically during the day to give you a good look around.</p>
-          <p>For the technically inclined, the method to this <span id="madness">madness</span> is on <a href="https://github.com/lmacka/chickenfeed">Github</a>.</p>
-
-          <div id="treat-container" class="hidden">
-            <hr>
-            <p>Want to give the chickens a treat? There's a container full of oats and mealworms just out of view...</p>
-            <button id="treat-button">Give them a treat</button>
-            <button id="toggle-light">Toggle Light</button>
-            <p>Note that there's a ~10 second delay in the video; be patient!</p>
-          </div>
+          <p>For the technically inclined, the method to this madness is on <a href="https://github.com/lmacka/chickenfeed">Github</a>.</p>
         `;
         document.body.appendChild(floatingWindow);
 
@@ -455,34 +490,6 @@
         closeFloatingBtn.addEventListener('click', () => {
           document.body.removeChild(floatingWindow);
         });
-
-        const treatButton = floatingWindow.querySelector('#treat-button');
-        if (treatButton) {
-          treatButton.addEventListener('click', () => {
-            fetch('/api/give-treat', {
-              method: 'POST'
-            })
-              .then(response => {
-                if (response.ok) {
-                  alert('Treat dispensed!\n\nThe chickens thank you!');
-                } else {
-                  alert('Something went wrong, or the treat machine is temporarily out of service.');
-                }
-              })
-              .catch(error => {
-                console.error('Error:', error);
-                alert('Something went wrong, or the treat machine is temporarily out of service.');
-              });
-          });
-        }
-
-        const toggleLightButton = floatingWindow.querySelector('#toggle-light');
-        if (toggleLightButton) {
-          toggleLightButton.addEventListener('click', () => {
-            const message = JSON.stringify({ command: 'toggle-light' });
-            ws.send(message);
-          });
-        }
       }
 
       document.addEventListener('mousemove', (e) => {
@@ -557,6 +564,22 @@
           startCooldown('preset-3');
         }
       });
+      
+      // Give Treat Button Event Handler
+      document.getElementById('give-treat').addEventListener('click', () => {
+        if (!presetButtons['give-treat'].disabled) {
+          giveTreat();
+          startCooldown('give-treat');
+        }
+      });
+      
+      // Toggle Light Button Event Handler
+      document.getElementById('toggle-light').addEventListener('click', () => {
+        if (!presetButtons['toggle-light'].disabled) {
+          toggleLight();
+          startCooldown('toggle-light');
+        }
+      });
 
       // Function to send PTZ commands via HTTP instead of WebSocket
       function sendPTZCommand(command) {
@@ -621,6 +644,128 @@
         })
         .catch(error => {
           console.error('Error executing PTZ command:', error);
+          
+          // Remove loading notification
+          if (document.body.contains(loadingNotification)) {
+            document.body.removeChild(loadingNotification);
+          }
+          
+          // Show error notification
+          const errorNotification = document.createElement('div');
+          errorNotification.className = 'ptz-notification';
+          errorNotification.textContent = `Error: ${error.message}`;
+          errorNotification.style.backgroundColor = 'rgba(220, 53, 69, 0.8)';
+          document.body.appendChild(errorNotification);
+          
+          // Remove notification after 3 seconds
+          setTimeout(() => {
+            if (document.body.contains(errorNotification)) {
+              document.body.removeChild(errorNotification);
+            }
+          }, 3000);
+        });
+      }
+
+      // Function to give treat
+      function giveTreat() {
+        // Show loading notification
+        const loadingNotification = document.createElement('div');
+        loadingNotification.className = 'ptz-notification';
+        loadingNotification.textContent = 'Dispensing treat...';
+        document.body.appendChild(loadingNotification);
+        
+        fetch('/api/give-treat', {
+          method: 'POST'
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          console.log('Treat dispensed:', data);
+          
+          // Remove loading notification
+          document.body.removeChild(loadingNotification);
+          
+          // Show success notification
+          const notification = document.createElement('div');
+          notification.className = 'ptz-notification';
+          notification.textContent = data.message || 'Treat dispensed!';
+          notification.style.backgroundColor = 'rgba(40, 167, 69, 0.8)';
+          document.body.appendChild(notification);
+          
+          // Remove notification after 3 seconds
+          setTimeout(() => {
+            if (document.body.contains(notification)) {
+              document.body.removeChild(notification);
+            }
+          }, 3000);
+        })
+        .catch(error => {
+          console.error('Error dispensing treat:', error);
+          
+          // Remove loading notification
+          if (document.body.contains(loadingNotification)) {
+            document.body.removeChild(loadingNotification);
+          }
+          
+          // Show error notification
+          const errorNotification = document.createElement('div');
+          errorNotification.className = 'ptz-notification';
+          errorNotification.textContent = `Error: ${error.message}`;
+          errorNotification.style.backgroundColor = 'rgba(220, 53, 69, 0.8)';
+          document.body.appendChild(errorNotification);
+          
+          // Remove notification after 3 seconds
+          setTimeout(() => {
+            if (document.body.contains(errorNotification)) {
+              document.body.removeChild(errorNotification);
+            }
+          }, 3000);
+        });
+      }
+      
+      // Function to toggle light
+      function toggleLight() {
+        // Show loading notification
+        const loadingNotification = document.createElement('div');
+        loadingNotification.className = 'ptz-notification';
+        loadingNotification.textContent = 'Toggling light...';
+        document.body.appendChild(loadingNotification);
+        
+        fetch('/api/toggle-light', {
+          method: 'POST'
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          console.log('Light toggled:', data);
+          
+          // Remove loading notification
+          document.body.removeChild(loadingNotification);
+          
+          // Show success notification
+          const notification = document.createElement('div');
+          notification.className = 'ptz-notification';
+          notification.textContent = data.message || 'Light toggled!';
+          notification.style.backgroundColor = 'rgba(40, 167, 69, 0.8)';
+          document.body.appendChild(notification);
+          
+          // Remove notification after 3 seconds
+          setTimeout(() => {
+            if (document.body.contains(notification)) {
+              document.body.removeChild(notification);
+            }
+          }, 3000);
+        })
+        .catch(error => {
+          console.error('Error toggling light:', error);
           
           // Remove loading notification
           if (document.body.contains(loadingNotification)) {
@@ -718,18 +863,6 @@
         video.src = '/feed/index.m3u8';
       }
     };
-
-    // Secret chookie goodies. Insanity pays.
-    let madnessClickCount = 0;
-    document.addEventListener('click', (event) => {
-      if (event.target.id === 'madness') {
-        madnessClickCount++;
-        if (madnessClickCount >= 10) {
-          const treatContainer = document.getElementById('treat-container');
-          treatContainer.classList.remove('hidden');
-        }
-      }
-    });
 
     document.addEventListener('DOMContentLoaded', create);
 
