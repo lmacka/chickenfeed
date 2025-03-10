@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chicky Control</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f1f1f1;
+            border-radius: 4px;
+        }
+        .light-status {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-left: 10px;
+            background-color: #ccc;
+        }
+        .light-on {
+            background-color: #ffeb3b;
+            box-shadow: 0 0 10px #ffeb3b;
+        }
+    </style>
+</head>
+<body>
+    <h1>Chicky Control Panel</h1>
+    <div>
+        <button id="toggleLight">Toggle Light</button>
+        <span id="lightStatus" class="light-status"></span>
+        <button id="giveTreat">Give Treat</button>
+    </div>
+    <div class="status" id="status">
+        Status: Checking connection...
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const statusElement = document.getElementById('status');
+            const toggleLightButton = document.getElementById('toggleLight');
+            const giveTreatButton = document.getElementById('giveTreat');
+            const lightStatusElement = document.getElementById('lightStatus');
+            
+            let lightState = false;
+            let visitorCount = 0;
+            
+            // Function to update the status display
+            function updateStatus(message) {
+                statusElement.textContent = message;
+            }
+            
+            // Function to update the light status indicator
+            function updateLightStatus(isOn) {
+                lightState = isOn;
+                if (isOn) {
+                    lightStatusElement.classList.add('light-on');
+                } else {
+                    lightStatusElement.classList.remove('light-on');
+                }
+            }
+            
+            // Check system health on page load
+            function checkHealth() {
+                fetch('/api/health')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'ok' && data.chicky && data.chicky.connected) {
+                            updateStatus(`Status: Connected (${data.visitors || 0} visitor(s))`);
+                            updateLightStatus(data.light.state === 'on');
+                        } else {
+                            updateStatus('Status: Chicky not connected');
+                        }
+                        visitorCount = data.visitors || 0;
+                    })
+                    .catch(error => {
+                        console.error('Error checking health:', error);
+                        updateStatus('Status: Error checking connection');
+                    });
+            }
+            
+            // Check health immediately and then every 10 seconds
+            checkHealth();
+            setInterval(checkHealth, 10000);
+            
+            // Toggle light button
+            toggleLightButton.addEventListener('click', () => {
+                updateStatus('Toggling light...');
+                fetch('/api/toggle-light', {
+                    method: 'POST',
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateStatus(`Status: ${data.message}`);
+                        updateLightStatus(data.state === 'on');
+                    } else {
+                        updateStatus(`Error: ${data.message}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    updateStatus('Status: Error toggling light');
+                });
+            });
+            
+            // Give treat button
+            giveTreatButton.addEventListener('click', () => {
+                updateStatus('Giving treat...');
+                fetch('/api/give-treat', {
+                    method: 'POST',
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateStatus(`Status: ${data.message}`);
+                    } else {
+                        updateStatus(`Error: ${data.message}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    updateStatus('Status: Error giving treat');
+                });
+            });
+        });
+    </script>
+</body>
+</html> 
