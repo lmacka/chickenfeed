@@ -28,13 +28,15 @@ RUN npm install
 RUN pip3 install --no-cache-dir --extra-index-url https://www.piwheels.org/simple \
     automationhat \
     smbus2 \
-    gpiozero
+    gpiozero \
+    lgpio \
+    rpi-lgpio
 
 # Copy application code
 COPY . .
 
 # Make sure the Python scripts are executable
-RUN chmod +x light.py servocontrol.py
+RUN chmod +x light.py servocontrol.py test_servo_lgpio.py
 
 # Enable I2C and SPI
 RUN echo "dtparam=i2c_arm=on" >> /boot/config.txt || true

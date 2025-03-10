@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 import sys
 import time
-from lib.pi5RC import pi5RC
+from lib.pi5RC_lgpio import pi5RC_lgpio
 
 # Function to convert angle to PWM pulse width in microseconds
 def angle_to_pulsewidth(angle):
@@ -21,8 +21,8 @@ if __name__ == "__main__":
         print("Error: Angle must be between 0 and 180")
         sys.exit(1)
 
-    # Initialize pi5RC
-    servo = pi5RC(gpio_pin)
+    # Initialize pi5RC_lgpio
+    servo = pi5RC_lgpio(gpio_pin)
 
     pulsewidth = angle_to_pulsewidth(angle)
 
