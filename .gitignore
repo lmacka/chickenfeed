@@ -125,7 +125,7 @@ public/
 # Linux files
 *.swp
 
-# # SOPS decrypted files
-# vps/.env
-# vps/mediamtx.yml
-# chicky/.env
+# SOPS decrypted files
+vps/.env
+vps/mediamtx.yml
+chicky/.env
