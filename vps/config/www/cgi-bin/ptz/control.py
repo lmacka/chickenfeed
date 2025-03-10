@@ -9,8 +9,8 @@ import os
 import sys
 import traceback
 from time import sleep
-import configparser
-import shutil
+import math
+from pathlib import Path
 
 # Enable CGI traceback for debugging
 cgitb.enable()
@@ -66,24 +66,25 @@ def log_to_file(message):
 def init_camera():
     """Initialize camera connection"""
     try:
-        # Read camera configuration from config file
-        config = configparser.ConfigParser()
-        config_file = '/config/ptz_config.ini'
+        # Get camera configuration from environment variables
+        camera_ip = os.environ.get('CAMERA_IP')
+        camera_port = os.environ.get('CAMERA_PORT')
+        camera_user = os.environ.get('CAMERA_USERNAME')
+        camera_pass = os.environ.get('CAMERA_PASSWORD')
+        pan_speed = os.environ.get('CAMERA_PAN_SPEED')
+        tilt_speed = os.environ.get('CAMERA_TILT_SPEED')
+        timeout = os.environ.get('CAMERA_TIMEOUT')
         
-        if not os.path.exists(config_file):
-            log_to_file(f"Config file {config_file} not found")
+        # Check if all required environment variables are present
+        if not all([camera_ip, camera_port, camera_user, camera_pass, pan_speed, tilt_speed, timeout]):
+            log_to_file("Missing required environment variables for camera configuration")
             return None, None, None, None, None, None
-            
-        config.read(config_file)
         
-        # Get camera connection parameters
-        camera_ip = config.get('camera', 'ip')
-        camera_port = config.getint('camera', 'port')
-        camera_user = config.get('camera', 'username')
-        camera_pass = config.get('camera', 'password')
-        pan_speed = config.getfloat('camera', 'pan_speed')
-        tilt_speed = config.getfloat('camera', 'tilt_speed')
-        timeout = config.getfloat('camera', 'timeout')
+        # Convert string values from environment variables to appropriate types
+        camera_port = int(camera_port)
+        pan_speed = float(pan_speed)
+        tilt_speed = float(tilt_speed)
+        timeout = float(timeout)
         
         # Create a custom transport with a cache in a writable location
         cache_file = os.path.join('/config/tmp', 'zeep_cache.db')

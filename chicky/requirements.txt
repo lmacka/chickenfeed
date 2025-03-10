@@ -1,3 +1,5 @@
 automationhat==1.0.0
 smbus2==0.5.0
-gpiod==2.3.0 
+gpiod==2.3.0
+lgpio==0.2.2.0
+rpi-lgpio==0.6 

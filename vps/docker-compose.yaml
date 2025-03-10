@@ -3,15 +3,23 @@ services:
     restart: always
     image: linuxserver/swag:latest
     environment:
-      - URL=onlychicks.tv
+      - URL=${URL}
       - VALIDATION=http
       - ONLY_SUBDOMAINS=false
       - STAGING=false
-      - SUBDOMAINS=www
-      - EXTRA_DOMAINS=chook.cam
+      - SUBDOMAINS=${SUBDOMAINS}
+      - EXTRA_DOMAINS=${EXTRA_DOMAINS}
       - PUID=1000
       - PGID=1000
       - TZ=Australia/Brisbane
+      # Camera PTZ configuration
+      - CAMERA_IP=${CAMERA_IP}
+      - CAMERA_PORT=${CAMERA_PORT}
+      - CAMERA_USERNAME=${CAMERA_USERNAME}
+      - CAMERA_PASSWORD=${CAMERA_PASSWORD}
+      - CAMERA_PAN_SPEED=${CAMERA_PAN_SPEED}
+      - CAMERA_TILT_SPEED=${CAMERA_TILT_SPEED}
+      - CAMERA_TIMEOUT=${CAMERA_TIMEOUT}
     ports:
       - "443:443"
       - "80:80"
@@ -35,7 +43,7 @@ services:
     hostname: chickenfeed-server
     restart: unless-stopped
     environment:
-      - TS_AUTHKEY=tskey-auth-xxxxx
+      - TS_AUTHKEY=${TS_AUTHKEY}
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_USERSPACE=false
       - TS_EXTRA_ARGS=--accept-routes=true
@@ -72,6 +80,9 @@ services:
     build: ./chicky-control
     ports:
       - "3000:3000"
+    environment:
+      - PORT=3000
+      - CHICKY_AUTH_TOKEN=${CHICKY_AUTH_TOKEN}
     volumes:
       - ./chicky-control:/usr/src/app:rw
       - ./config/keys:/keys:ro

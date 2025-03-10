@@ -7,18 +7,22 @@ services:
     restart: always
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
-      - PORT=3000
-      - VPS_URL=https://onlychicks.tv
-      - AUTH_TOKEN=default-token-change-me
-      - SERVO1_PIN=15
-      - SERVO2_PIN=14
+      - PORT
+      - VPS_URL
+      - AUTH_TOKEN
+      - SERVO1_PIN
+      - SERVO2_PIN
     labels:
       io.balena.features.kernel-modules: '1'
       io.balena.features.firmware: '1'
       io.balena.features.dbus: '1'
       io.balena.features.sysfs: '1'
       io.balena.features.procfs: '1'
+      io.balena.features.supervisor-api: '1'
     devices:
       - "/dev/i2c-1:/dev/i2c-1"
       - "/dev/gpiomem:/dev/gpiomem"
+      - "/dev/gpiochip0:/dev/gpiochip0"
