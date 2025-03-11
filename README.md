@@ -1,27 +1,17 @@
-# 🐔 Chicken Feed
+#  <img src="docs/chickenfeed.webp" alt="Chicken Feed" width="40"/> Chicken Feed
 
-<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
-  <div style="flex: 2; padding-right: 20px;">
-    <h2 style="margin-top: 0;">A Smart Chicken Coop Monitoring System</h2>
-    <p>Interactive chicken video stream; who woulda thunk it?</p>
-    <p>
-      <a href="https://chook.cam"><img src="https://img.shields.io/badge/Live_Demo-chook.cam-ff9966?style=for-the-badge&logo=internetexplorer&logoColor=white" alt="Live Demo"></a>
-      <a href="https://github.com/lmacka/chickenfeed"><img src="https://img.shields.io/badge/GitHub-Repository-a8d1ff?style=for-the-badge&logo=github&logoColor=black" alt="GitHub"></a>
-      <a href="https://github.com/lmacka/coopi"><img src="https://img.shields.io/badge/Related-Coopi_Controller-b3e6b3?style=for-the-badge&logo=github&logoColor=black" alt="Related Project"></a>
-    </p>
-    <p>
-      <img src="https://img.shields.io/badge/Docker-Powered-d8c1ff?style=flat-square&logo=docker&logoColor=white" alt="Docker">
-      <img src="https://img.shields.io/badge/Tailscale-Secured-ffb3d1?style=flat-square&logo=tailscale&logoColor=white" alt="Tailscale">
-      <img src="https://img.shields.io/badge/Node.js-Powered-b3e6b3?style=flat-square&logo=node.js&logoColor=white" alt="Node.js">
-      <img src="https://img.shields.io/badge/HLS-Streaming-ffd9b3?style=flat-square&logo=videojs&logoColor=white" alt="HLS">
-      <img src="https://img.shields.io/badge/IoT-Hardware-c1f0d9?style=flat-square&logo=raspberrypi&logoColor=white" alt="IoT">
-    </p>
-  </div>
-  <div style="flex: 1; text-align: center;">
-    <img src="docs/chickenfeed.webp" alt="Chicken Feed" width="200"/>
-    <p><em>Check it out live at <a href="https://chook.cam">chook.cam</a></em></p>
-  </div>
-</div>
+## A Smart Chicken Coop Monitoring System
+Interactive chicken video stream; who woulda thunk it?
+
+[![Live Demo](https://img.shields.io/badge/Live_Demo-chook.cam-ff9966?style=for-the-badge&logo=internetexplorer&logoColor=white)](https://chook.cam)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-a8d1ff?style=for-the-badge&logo=github&logoColor=black)](https://github.com/lmacka/chickenfeed)
+[![Related](https://img.shields.io/badge/Related-Coopi_Controller-b3e6b3?style=for-the-badge&logo=github&logoColor=black)](https://github.com/lmacka/coopi)
+
+![Docker](https://img.shields.io/badge/Docker-Powered-d8c1ff?style=flat-square&logo=docker&logoColor=white)
+![Tailscale](https://img.shields.io/badge/Tailscale-Secured-ffb3d1?style=flat-square&logo=tailscale&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-Powered-b3e6b3?style=flat-square&logo=node.js&logoColor=white)
+![HLS](https://img.shields.io/badge/HLS-Streaming-ffd9b3?style=flat-square&logo=videojs&logoColor=white)
+![IoT](https://img.shields.io/badge/IoT-Hardware-c1f0d9?style=flat-square&logo=raspberrypi&logoColor=white)
 
 ## 📋 What's This?
 
@@ -40,7 +30,7 @@ Under the hood, it's got some cool tech that I've put together to solve a bunch 
 ---
 config:
   layout: dagre
-  look: handDrawn
+  look: neo
 ---
 flowchart TD
  subgraph Users["Internet Users"]
@@ -140,7 +130,7 @@ flowchart TD
 ---
 config:
   layout: dagre
-  look: handDrawn
+  look: neo
 ---
 flowchart LR
     User["Internet User"]
@@ -186,9 +176,10 @@ I've set things up so that:
 - Lets people interact with my chicken setup (which is just fun)
 - Works on pretty much any device with a modern browser
 
----
+## 📝 Todo List
 
-<div align="center">
-  <p>Just a fun project that combines streaming video, hardware control, and secure networking in one chicken-themed package!</p>
-</div>
-
+- [ ] Add time restrictions around control interactions so the chooks get a good night's sleep
+- [ ] Implement rate limiting on the API side of things
+- [ ] Improve cooldown handling for controls
+- [ ] Fix current viewer stats (currently broken)
+- [ ] Redesign control panel for better user experience
