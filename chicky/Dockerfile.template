@@ -23,14 +23,20 @@ COPY package*.json ./
 # Install Node.js dependencies
 RUN npm install
 
-# Install Python dependencies
+# Install Python dependencies - following Pimoroni's approach
 # The key is to install pre-built packages where possible
 RUN pip3 install --no-cache-dir --extra-index-url https://www.piwheels.org/simple \
     automationhat \
-    gpiozero
+    smbus2 \
+    gpiozero \
+    lgpio \
+    rpi-lgpio
 
 # Copy application code
 COPY . .
+
+# Make sure the Python scripts are executable
+RUN chmod +x light.py servocontrol.py
 
 # Enable I2C and SPI
 RUN echo "dtparam=i2c_arm=on" >> /boot/config.txt || true
