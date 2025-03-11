@@ -158,9 +158,27 @@ function connectToServer() {
     });
 }
 
+// Function to check if current time is within allowed hours (5am to 7pm)
+function isWithinAllowedHours() {
+    const now = new Date();
+    const hour = now.getHours();
+    return hour >= 5 && hour < 19; // 5am to 7pm (19:00)
+}
+
 // Function to handle light commands
 function handleLightCommand(data) {
     try {
+        // Check if the command is within allowed hours
+        if (!isWithinAllowedHours()) {
+            console.log('Light command rejected: outside allowed hours (5am-7pm)');
+            socket.emit('light-confirmation', {
+                success: false,
+                state: data.state,
+                error: 'Sorry, the chicken coop light can only be operated between 5am and 7pm.'
+            });
+            return;
+        }
+
         const state = data.state;
         if (state !== 'on' && state !== 'off') {
             console.error('Invalid light state:', state);
@@ -205,6 +223,17 @@ function handleLightCommand(data) {
 // Function to handle treat commands
 function handleTreatCommand(data) {
     try {
+        // Check if the command is within allowed hours
+        if (!isWithinAllowedHours()) {
+            console.log('Treat command rejected: outside allowed hours (5am-7pm)');
+            socket.emit('treat-confirmation', {
+                success: false,
+                servo: data.servo || 'servo1',
+                error: 'Sorry, treats can only be dispensed between 5am and 7pm.'
+            });
+            return;
+        }
+
         const servo = data.servo || 'servo1';
         let servoValue;
         
