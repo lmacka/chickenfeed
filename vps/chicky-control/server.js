@@ -1,6 +1,7 @@
 const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
+const morgan = require('morgan');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -24,24 +25,24 @@ let lightState = false; // Track the state of the light
 let visitorCount = 0; // Track visitor count
 let chickyClient = null; // Reference to the chicky client socket
 
-// Middleware
-app.use(express.static('public')); // Serve static files from the 'public' directory
-app.use(express.json()); // Parse JSON request bodies
+// ===== MIDDLEWARE CONFIGURATION =====
+// 1. Request logging middleware (Morgan with combined format to stdout)
+app.use(morgan('combined'));
 
-// Log all incoming requests for debugging
-app.use((req, res, next) => {
-  console.log(`Received ${req.method} request to ${req.url}`);
-  next();
-});
+// 2. Parse JSON request bodies
+app.use(express.json());
 
-// Enable CORS for API requests
+// 3. Enable CORS for API requests
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
   next();
 });
 
-// Socket.IO connection handling
+// 4. Serve static files from the 'public' directory
+app.use(express.static('public'));
+
+// ===== SOCKET.IO HANDLERS =====
 io.on('connection', (socket) => {
   console.log(`New client connected: ${socket.id}`);
   visitorCount++;
@@ -93,6 +94,7 @@ io.on('connection', (socket) => {
   });
 });
 
+// ===== API ROUTES =====
 // Toggle light endpoint
 app.all('/api/toggle-light', (req, res) => {
   // Check if chicky client is connected

@@ -7,14 +7,13 @@ services:
     restart: always
     ports:
       - "3000:3000"
-    env_file:
-      - .env
     environment:
-      - PORT
-      - VPS_URL
-      - AUTH_TOKEN
-      - SERVO1_PIN
-      - SERVO2_PIN
+      PORT: "3000"
+      REMOTE_WS_URL: "wss://onlychicks.tv"
+      AUTH_TOKEN: "${AUTH_TOKEN}"
+      SERVO1_PIN: "15"
+      SERVO2_PIN: "14"
+      DEBUG: "false"
     labels:
       io.balena.features.kernel-modules: '1'
       io.balena.features.firmware: '1'
