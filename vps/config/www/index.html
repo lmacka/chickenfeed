@@ -361,24 +361,46 @@
   <script>
     const viewerCount = document.getElementById('viewer-count');
     
-    // Function to update viewer count
-    function updateViewerCount() {
-      fetch('/api/visitors')
-        .then(response => response.json())
-        .then(data => {
-          viewerCount.textContent = 'Viewers: ' + (data.count || 0);
-        })
-        .catch(error => {
-          console.error('Error fetching viewer count:', error);
-        });
+    // Function to update viewer count using WebSockets
+    function setupViewerCountSocket() {
+      // Create a socket connection to the server
+      const socket = io();
+      
+      // Listen for visitor-count events
+      socket.on('visitor-count', (data) => {
+        viewerCount.textContent = 'Viewers: ' + (data.count || 0);
+      });
+      
+      // Handle connection/reconnection
+      socket.on('connect', () => {
+        console.log('Connected to server for viewer count updates');
+      });
+      
+      // Handle disconnection
+      socket.on('disconnect', () => {
+        console.log('Disconnected from server, viewer count updates paused');
+        viewerCount.textContent = 'Viewers: --';
+      });
+      
+      return socket;
     }
     
-    // Update viewer count immediately and then every 10 seconds
-    updateViewerCount();
-    setInterval(updateViewerCount, 10000);
-
+    // Initialize the WebSocket connection
+    let socket;
+    
+    // Clean up socket connection when page unloads
+    window.addEventListener('beforeunload', () => {
+      if (socket && socket.connected) {
+        console.log('Closing socket connection');
+        socket.disconnect();
+      }
+    });
+    
     // PTZ Control Panel Draggable Functionality
     document.addEventListener('DOMContentLoaded', () => {
+      // Setup viewer count socket
+      socket = setupViewerCountSocket();
+      
       const ptzPanel = document.getElementById('ptz-control-panel');
       const dragHandle = document.getElementById('drag-handle');
       const initialHeight = ptzPanel.offsetHeight;
@@ -791,6 +813,7 @@
   </script>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.1.5"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script>
     const create = () => {
       const video = document.getElementById('video');
