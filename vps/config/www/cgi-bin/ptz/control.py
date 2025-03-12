@@ -44,24 +44,16 @@ except ImportError:
     print("")
     print(json.dumps({
         "success": False,
-        "message": "ONVIF library not installed. Please run: pip install onvif_zeep"
+        "message": "ONVIF library not installed"
     }))
     sys.exit(1)
 
 # Path to WSDL files
 WSDL_PATH = '/config/www/cgi-bin/ptz/wsdl'
 
-# Ensure schema files are in the correct location
-def ensure_schema_files():
-    """Ensure schema files are in the correct location"""
-    # The schema files should already be in place from the initialization script
-    # This function is kept for compatibility but doesn't need to do anything
-    return True
-
-def log_to_file(message):
-    """Log message to a file for debugging"""
-    with open('/config/www/cgi-bin/ptz/ptz_log.txt', 'a') as f:
-        f.write(f"{message}\n")
+def log_message(message):
+    """Log message to stderr for container logging"""
+    print(f"PTZ: {message}", file=sys.stderr)
 
 def init_camera():
     """Initialize camera connection"""
@@ -77,7 +69,7 @@ def init_camera():
         
         # Check if all required environment variables are present
         if not all([camera_ip, camera_port, camera_user, camera_pass, pan_speed, tilt_speed, timeout]):
-            log_to_file("Missing required environment variables for camera configuration")
+            log_message("Missing required environment variables for camera configuration")
             return None, None, None, None, None, None
         
         # Convert string values from environment variables to appropriate types
@@ -107,7 +99,7 @@ def init_camera():
         profiles = media.GetProfiles()
         
         if not profiles:
-            log_to_file("No profiles found")
+            log_message("No profiles found")
             return None, None, None, None, None, None
             
         # Use the first profile
@@ -119,8 +111,8 @@ def init_camera():
         return camera, ptz, token, pan_speed, tilt_speed, timeout
         
     except Exception as e:
-        log_to_file(f"Error initializing camera: {str(e)}")
-        log_to_file(traceback.format_exc())
+        log_message(f"Error initializing camera: {str(e)}")
+        log_message(traceback.format_exc())
         return None, None, None, None, None, None
 
 def move_camera(direction, camera=None, ptz=None, token=None, pan_speed=None, tilt_speed=None, timeout=None):
@@ -139,9 +131,10 @@ def move_camera(direction, camera=None, ptz=None, token=None, pan_speed=None, ti
             
             # Map preset numbers to names
             preset_names = {
-                "1": "Heater",
-                "2": "Window",
-                "3": "Feeders"
+                "1": "Viewpoint 1",
+                "2": "Viewpoint 2",
+                "3": "Viewpoint 3",
+                "4": "Viewpoint 4"
             }
             
             preset_name = preset_names.get(preset_number, f"Preset {preset_number}")
@@ -168,11 +161,6 @@ def move_camera(direction, camera=None, ptz=None, token=None, pan_speed=None, ti
                 return {"success": False, "message": f"Preset {preset_name} not found"}
         
         # Handle directional movement
-        if direction == 'stop':
-            # Stop movement
-            ptz.Stop({'ProfileToken': token})
-            return {"success": True, "message": "Camera stopped"}
-            
         # Create request template
         req = ptz.create_type('ContinuousMove')
         req.ProfileToken = token
@@ -202,42 +190,8 @@ def move_camera(direction, camera=None, ptz=None, token=None, pan_speed=None, ti
         return {"success": True, "message": f"Camera moved {direction}"}
         
     except Exception as e:
-        log_to_file(f"Error moving camera: {str(e)}")
-        log_to_file(traceback.format_exc())
-        return {"success": False, "message": str(e)}
-
-def save_preset(preset_number, camera=None, ptz=None, token=None):
-    """Save the current position as a preset"""
-    try:
-        # If camera, ptz, or token is not provided, initialize the camera
-        if camera is None or ptz is None or token is None:
-            camera, ptz, token, _, _, _ = init_camera()
-            
-        if camera is None or ptz is None or token is None:
-            return {"success": False, "message": "Failed to initialize camera"}
-        
-        # Map preset numbers to names
-        preset_names = {
-            "1": "Heater",
-            "2": "Window",
-            "3": "Feeders"
-        }
-        
-        preset_name = preset_names.get(preset_number, f"Preset {preset_number}")
-        
-        # Create preset request
-        preset_request = ptz.create_type('SetPreset')
-        preset_request.ProfileToken = token
-        preset_request.PresetName = preset_name
-        
-        # Set the preset
-        preset_token = ptz.SetPreset(preset_request)
-        
-        return {"success": True, "message": f"Preset {preset_name} saved"}
-        
-    except Exception as e:
-        log_to_file(f"Error saving preset: {str(e)}")
-        log_to_file(traceback.format_exc())
+        log_message(f"Error moving camera: {str(e)}")
+        log_message(traceback.format_exc())
         return {"success": False, "message": str(e)}
 
 def main():
@@ -258,22 +212,16 @@ def main():
             }))
             return
             
-        log_to_file(f"Received action: {action}")
+        log_message(f"Received action: {action}")
         
-        if action.startswith('save-preset-'):
-            # Handle save preset command
-            preset_number = action.split('-')[2]
-            result = save_preset(preset_number)
-            print(json.dumps(result))
-        else:
-            # Handle movement command
-            result = move_camera(action)
-            print(json.dumps(result))
+        # Handle movement command
+        result = move_camera(action)
+        print(json.dumps(result))
             
     except Exception as e:
         # Log any exceptions
-        log_to_file(f"Unhandled exception: {str(e)}")
-        log_to_file(traceback.format_exc())
+        log_message(f"Unhandled exception: {str(e)}")
+        log_message(traceback.format_exc())
         
         # Return error response
         error_response = {

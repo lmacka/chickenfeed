@@ -14,7 +14,7 @@
       overflow: hidden;
       background: black;
       font-family: 'Roboto', sans-serif;
-      background: url('chickenfeet.jpg') repeat;
+      background: url('img/chickenfeet.jpg') repeat;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -59,7 +59,7 @@
       
       .preset-btn {
         padding: 14px 0;
-        font-size: 14px;
+        font-size: 10px;
         min-height: 44px; /* Minimum touch target size */
       }
       
@@ -136,7 +136,7 @@
 
     .preset-controls {
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: 1fr 1fr;
       gap: 10px;
     }
 
@@ -359,21 +359,26 @@
       </button>
       <button class="preset-btn" id="preset-2">
         <span class="icon-camera"></span>
-        Window
+        Floor
         <div class="cooldown-overlay" id="cooldown-2"></div>
       </button>
       <button class="preset-btn" id="preset-3">
         <span class="icon-camera"></span>
-        Feeders
+        Perch
         <div class="cooldown-overlay" id="cooldown-3"></div>
       </button>
-      <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.3); margin: 15px 0;">
-      <button class="preset-btn" id="give-treat">
+      <button class="preset-btn" id="preset-4">
+        <span class="icon-camera"></span>
+        Feeders
+        <div class="cooldown-overlay" id="cooldown-4"></div>
+      </button>
+      <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.3); margin: 15px 0; grid-column: 1 / span 2;">
+      <button class="preset-btn" id="give-treat" style="grid-column: 1 / span 2;">
         <span class="icon icon-treat"></span>
         Give Treat
         <div class="cooldown-overlay" id="cooldown-treat"></div>
       </button>
-      <button class="preset-btn" id="toggle-light">
+      <button class="preset-btn" id="toggle-light" style="grid-column: 1 / span 2;">
         <span class="icon icon-light"></span>
         Toggle Light
         <div class="cooldown-overlay" id="cooldown-light"></div>
@@ -432,11 +437,12 @@
       let offsetX, offsetY;
       
       // Rate limiting variables
-      const cooldownTime = 20000; // 20 seconds in milliseconds
+      const cooldownTime = 5000; // 5 seconds in milliseconds
       const presetButtons = {
         'preset-1': document.getElementById('preset-1'),
         'preset-2': document.getElementById('preset-2'),
         'preset-3': document.getElementById('preset-3'),
+        'preset-4': document.getElementById('preset-4'),
         'give-treat': document.getElementById('give-treat'),
         'toggle-light': document.getElementById('toggle-light')
       };
@@ -444,6 +450,7 @@
         'preset-1': document.getElementById('cooldown-1'),
         'preset-2': document.getElementById('cooldown-2'),
         'preset-3': document.getElementById('cooldown-3'),
+        'preset-4': document.getElementById('cooldown-4'),
         'give-treat': document.getElementById('cooldown-treat'),
         'toggle-light': document.getElementById('cooldown-light')
       };
@@ -592,6 +599,13 @@
         }
       });
       
+      document.getElementById('preset-4').addEventListener('click', () => {
+        if (!presetButtons['preset-4'].disabled) {
+          sendPTZCommand('preset-4');
+          startCooldown('preset-4');
+        }
+      });
+      
       // Give Treat Button Event Handler
       document.getElementById('give-treat').addEventListener('click', () => {
         if (!presetButtons['give-treat'].disabled) {
@@ -716,11 +730,18 @@
           // Remove loading notification
           document.body.removeChild(loadingNotification);
           
-          // Show success notification
+          // Show success or error notification based on the response
           const notification = document.createElement('div');
           notification.className = 'ptz-notification';
-          notification.textContent = data.message || 'Treat dispensed!';
-          notification.style.backgroundColor = 'rgba(40, 167, 69, 0.8)';
+          
+          if (data.success) {
+            notification.textContent = data.message || 'Treat dispensed!';
+            notification.style.backgroundColor = 'rgba(40, 167, 69, 0.8)';
+          } else {
+            notification.textContent = data.message || 'Error dispensing treat';
+            notification.style.backgroundColor = 'rgba(220, 53, 69, 0.8)';
+          }
+          
           document.body.appendChild(notification);
           
           // Remove notification after 3 seconds
@@ -777,11 +798,18 @@
           // Remove loading notification
           document.body.removeChild(loadingNotification);
           
-          // Show success notification
+          // Show success or error notification based on the response
           const notification = document.createElement('div');
           notification.className = 'ptz-notification';
-          notification.textContent = data.message || 'Light toggled!';
-          notification.style.backgroundColor = 'rgba(40, 167, 69, 0.8)';
+          
+          if (data.success) {
+            notification.textContent = data.message || 'Light toggled!';
+            notification.style.backgroundColor = 'rgba(40, 167, 69, 0.8)';
+          } else {
+            notification.textContent = data.message || 'Error toggling light';
+            notification.style.backgroundColor = 'rgba(220, 53, 69, 0.8)';
+          }
+          
           document.body.appendChild(notification);
           
           // Remove notification after 3 seconds
@@ -897,3 +925,4 @@
 </body>
 
 </html>
+

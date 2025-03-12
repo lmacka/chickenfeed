@@ -25,6 +25,17 @@ let lightState = false; // Track the state of the light
 let visitorCount = 0; // Track visitor count
 let chickyClient = null; // Reference to the chicky client socket
 
+// Store pending requests
+const pendingRequests = {
+  light: new Map(), // Map of request IDs to response objects
+  treat: new Map()  // Map of request IDs to response objects
+};
+
+// Generate a unique request ID
+function generateRequestId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+}
+
 // ===== MIDDLEWARE CONFIGURATION =====
 // 1. Request logging middleware (Morgan with combined format to stdout)
 app.use(morgan('combined'));
@@ -68,15 +79,52 @@ io.on('connection', (socket) => {
   // Handle light toggle confirmation
   socket.on('light-confirmation', (data) => {
     console.log(`Received light confirmation: ${JSON.stringify(data)}`);
+    
+    // Update light state if successful
     if (data.success) {
       lightState = data.state === 'on';
       console.log(`Updated light state to: ${lightState ? 'on' : 'off'}`);
+    }
+    
+    // Check if there are any pending light requests
+    if (pendingRequests.light.size > 0) {
+      // Get the oldest pending request
+      const [requestId, res] = pendingRequests.light.entries().next().value;
+      
+      // Send the response back to the client
+      if (res && !res.headersSent) {
+        res.json({
+          success: data.success,
+          message: data.error || `Light ${data.state === 'on' ? 'turned on' : 'turned off'}`,
+          state: data.state
+        });
+      }
+      
+      // Remove the request from the pending list
+      pendingRequests.light.delete(requestId);
     }
   });
   
   // Handle treat confirmation
   socket.on('treat-confirmation', (data) => {
     console.log(`Received treat confirmation: ${JSON.stringify(data)}`);
+    
+    // Check if there are any pending treat requests
+    if (pendingRequests.treat.size > 0) {
+      // Get the oldest pending request
+      const [requestId, res] = pendingRequests.treat.entries().next().value;
+      
+      // Send the response back to the client
+      if (res && !res.headersSent) {
+        res.json({
+          success: data.success,
+          message: data.error || 'Treat dispensed successfully!'
+        });
+      }
+      
+      // Remove the request from the pending list
+      pendingRequests.treat.delete(requestId);
+    }
   });
   
   // Handle disconnection
@@ -87,6 +135,28 @@ io.on('connection', (socket) => {
     if (socket === chickyClient) {
       console.log('Chicky client disconnected');
       chickyClient = null;
+      
+      // Respond to all pending requests with an error
+      pendingRequests.light.forEach((res) => {
+        if (res && !res.headersSent) {
+          res.status(503).json({
+            success: false,
+            message: 'Chicky controller disconnected during operation',
+            state: lightState ? 'on' : 'off'
+          });
+        }
+      });
+      pendingRequests.light.clear();
+      
+      pendingRequests.treat.forEach((res) => {
+        if (res && !res.headersSent) {
+          res.status(503).json({
+            success: false,
+            message: 'Chicky controller disconnected during operation'
+          });
+        }
+      });
+      pendingRequests.treat.clear();
     }
     
     visitorCount = Math.max(0, visitorCount - 1);
@@ -112,15 +182,28 @@ app.all('/api/toggle-light', (req, res) => {
   const lightStateStr = lightState ? 'on' : 'off';
   console.log(`Toggling light to ${lightStateStr}`);
   
-  // Send command to chicky client
-  chickyClient.emit('toggle-light', { state: lightStateStr });
-  console.log(`Sent toggle-light command to chicky: ${lightStateStr}`);
+  // Generate a request ID
+  const requestId = generateRequestId();
   
-  res.status(200).json({
-    success: true,
-    message: `Light toggling to ${lightStateStr}`,
-    state: lightStateStr
-  });
+  // Store the response object for later use
+  pendingRequests.light.set(requestId, res);
+  
+  // Set a timeout to handle cases where the chicky client doesn't respond
+  setTimeout(() => {
+    if (pendingRequests.light.has(requestId)) {
+      console.error('Light toggle confirmation timed out');
+      res.status(504).json({
+        success: false,
+        message: 'Request timed out waiting for chicky controller response',
+        state: lightState ? 'on' : 'off'
+      });
+      pendingRequests.light.delete(requestId);
+    }
+  }, 10000); // 10 second timeout
+  
+  // Send command to chicky client
+  chickyClient.emit('toggle-light', { state: lightStateStr, requestId });
+  console.log(`Sent toggle-light command to chicky: ${lightStateStr}`);
 });
 
 // Give treat endpoint
@@ -136,14 +219,27 @@ app.all('/api/give-treat', (req, res) => {
   
   console.log('Giving treat');
   
-  // Send command to chicky client
-  chickyClient.emit('give-treat', { servo: 'servo1' });
-  console.log('Sent give-treat command to chicky');
+  // Generate a request ID
+  const requestId = generateRequestId();
   
-  res.status(200).json({
-    success: true,
-    message: 'Treat dispensing!'
-  });
+  // Store the response object for later use
+  pendingRequests.treat.set(requestId, res);
+  
+  // Set a timeout to handle cases where the chicky client doesn't respond
+  setTimeout(() => {
+    if (pendingRequests.treat.has(requestId)) {
+      console.error('Treat dispense confirmation timed out');
+      res.status(504).json({
+        success: false,
+        message: 'Request timed out waiting for chicky controller response'
+      });
+      pendingRequests.treat.delete(requestId);
+    }
+  }, 10000); // 10 second timeout
+  
+  // Send command to chicky client
+  chickyClient.emit('give-treat', { servo: 'servo1', requestId });
+  console.log('Sent give-treat command to chicky');
 });
 
 // Health check endpoint
