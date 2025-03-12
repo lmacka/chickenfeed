@@ -83,6 +83,13 @@ services:
     environment:
       - PORT=3000
       - CHICKY_AUTH_TOKEN=${CHICKY_AUTH_TOKEN}
+      # Chicky configuration (for raspberry pi)
+      - chicky_servo1_pin=15
+      - chicky_servo2_pin=14
+      - chicky_debug=false
+      - chicky_allowed_start_hour=5  # 5am AEST
+      - chicky_allowed_end_hour=19   # 7pm AEST
+      - chicky_timezone_offset=10    # AEST+10
     volumes:
       - ./chicky-control:/usr/src/app:rw
       - ./config/keys:/keys:ro
