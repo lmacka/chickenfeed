@@ -7,6 +7,8 @@
   <title>Chicken Live Stream</title>
   <meta property="og:image" content="https://onlychicks.tv/fb_preview.png" />
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+  <!-- Video.js CSS -->
+  <link href="https://vjs.zencdn.net/8.21.1/video-js.css" rel="stylesheet" />
   <style>
     body {
       margin: 0;
@@ -21,12 +23,18 @@
       height: 100vh;
     }
 
-    #video {
+    .video-container {
+      width: 100%;
+      max-width: 95vw;
+      max-height: 100vh;
+      position: relative;
+    }
+
+    .video-js {
       width: 100%;
       height: auto;
       max-height: 100vh;
-      max-width: 95vw;
-      object-fit: contain;
+      aspect-ratio: 16/9;
     }
 
     /* PTZ Control Panel Styles */
@@ -334,7 +342,15 @@
 </head>
 
 <body>
-  <video id="video" muted autoplay controls playsinline></video>
+  <div class="video-container">
+    <video id="chicken-stream" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" playsinline muted>
+      <!-- Sources will be added via JavaScript -->
+      <p class="vjs-no-js">
+        To view this video please enable JavaScript, and consider upgrading to a
+        web browser that supports HTML5 video
+      </p>
+    </video>
+  </div>
 
   <!-- PTZ Control Panel -->
   <div id="ptz-control-panel">
@@ -387,13 +403,27 @@
   </div>
 
   <div id="viewer-count">Viewers: 0</div>
+  
+  <!-- Video.js and plugins -->
+  <script src="https://vjs.zencdn.net/8.21.1/video.min.js"></script>
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  
   <script>
     const viewerCount = document.getElementById('viewer-count');
     
     // Function to update viewer count using WebSockets
     function setupViewerCountSocket() {
       // Create a socket connection to the server
-      const socket = io();
+      const socket = io({
+        path: '/socket.io',
+        transports: ['websocket', 'polling'],
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        // Force the connection to use the current hostname
+        forceNew: true
+      });
+      
+      console.log('Setting up Socket.IO connection to', window.location.origin);
       
       // Listen for visitor-count events
       socket.on('visitor-count', (data) => {
@@ -411,6 +441,19 @@
         viewerCount.textContent = 'Viewers: --';
       });
       
+      // Handle connection errors
+      socket.on('connect_error', (error) => {
+        console.error('Socket.IO connection error:', error);
+        viewerCount.textContent = 'Viewers: --';
+        
+        // Try to reconnect with a different approach if needed
+        if (socket.io.uri !== window.location.origin) {
+          console.log('Trying to reconnect with explicit origin:', window.location.origin);
+          socket.io.uri = window.location.origin;
+          socket.connect();
+        }
+      });
+      
       return socket;
     }
     
@@ -425,11 +468,175 @@
       }
     });
     
-    // PTZ Control Panel Draggable Functionality
+    // Initialize the page when the DOM is loaded
     document.addEventListener('DOMContentLoaded', () => {
       // Setup viewer count socket
       socket = setupViewerCountSocket();
       
+      // Get video element
+      const videoElement = document.getElementById('chicken-stream');
+      let videojs_player = null;
+      
+      // Function to initialize MediaMTX WebRTC
+      /* WEBRTC FUNCTIONALITY COMMENTED OUT - BEGIN
+      async function initWebRTC() {
+        console.log('Initializing MediaMTX WebRTC');
+        
+        try {
+          // Create a new RTCPeerConnection without STUN servers for direct connection
+          const pc = new RTCPeerConnection({
+            iceServers: []
+          });
+          
+          // Add event handlers for connection state changes
+          pc.oniceconnectionstatechange = () => {
+            console.log('ICE connection state:', pc.iceConnectionState);
+            if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+              console.error('WebRTC connection failed or disconnected');
+              fallbackToHLS();
+            }
+          };
+          
+          pc.onconnectionstatechange = () => {
+            console.log('Connection state:', pc.connectionState);
+            if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
+              console.error('WebRTC connection failed or disconnected');
+              fallbackToHLS();
+            }
+          };
+          
+          // Handle incoming tracks
+          pc.ontrack = (event) => {
+            console.log('Received track:', event.track.kind);
+            if (event.track.kind === 'video') {
+              videoElement.srcObject = event.streams[0];
+              
+              // Play the video
+              videoElement.play().catch(error => {
+                console.error('Error playing WebRTC stream:', error);
+                fallbackToHLS();
+              });
+            }
+          };
+          
+          // Create a transceiver for receiving video
+          pc.addTransceiver('video', { direction: 'recvonly' });
+          pc.addTransceiver('audio', { direction: 'recvonly' });
+          
+          // Create offer
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          
+          // Send the offer to MediaMTX WebRTC API
+          const response = await fetch('https://onlychicks.tv:8889/proxied/whep', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/sdp',
+            },
+            body: pc.localDescription.sdp
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          // Get the SDP answer from the response
+          const answerSDP = await response.text();
+          
+          // Set the remote description
+          await pc.setRemoteDescription({
+            type: 'answer',
+            sdp: answerSDP
+          });
+          
+          console.log('WebRTC connection established');
+          
+          // Set a timeout to check if video is playing
+          setTimeout(() => {
+            if (videoElement.readyState === 0) { // HAVE_NOTHING
+              console.warn('WebRTC stream not playing after timeout, falling back to HLS');
+              fallbackToHLS();
+            }
+          }, 10000); // 10 seconds timeout
+          
+          return pc;
+        } catch (error) {
+          console.error('Error setting up WebRTC:', error);
+          fallbackToHLS();
+          return null;
+        }
+      }
+      WEBRTC FUNCTIONALITY COMMENTED OUT - END */
+      
+      // Function to initialize HLS via Video.js
+      function initHLS() {
+        console.log('Initializing HLS stream');
+        
+        // Clean up video element
+        if (videoElement.srcObject) {
+          const tracks = videoElement.srcObject.getTracks();
+          tracks.forEach(track => track.stop());
+          videoElement.srcObject = null;
+        }
+        
+        // Remove controls from the native video element
+        videoElement.controls = false;
+        
+        // Initialize Video.js if not already initialized
+        if (!videojs_player) {
+          videojs_player = videojs('chicken-stream', {
+            fluid: true,
+            autoplay: true,
+            muted: true,
+            liveui: true,
+            controls: true,
+            controlBar: {
+              pictureInPictureToggle: false
+            }
+          });
+        }
+        
+        // Set HLS source
+        videojs_player.src({
+          src: '/feed/index.m3u8',
+          type: 'application/x-mpegURL'
+        });
+        
+        videojs_player.play().catch(error => {
+          console.error('Error playing HLS stream:', error);
+        });
+      }
+      
+      // Always use HLS (WebRTC functionality is commented out)
+      console.log('Using HLS stream by default');
+      initHLS();
+      
+      /* WEBRTC CHECK COMMENTED OUT - BEGIN
+      // Check if WebRTC is supported
+      if (window.RTCPeerConnection && window.fetch) {
+        console.log('WebRTC is supported, attempting to use native WebRTC with MediaMTX');
+        
+        // Set up video element for WebRTC
+        videoElement.controls = true;
+        videoElement.muted = true;
+        videoElement.playsInline = true;
+        videoElement.autoplay = true;
+        
+        // Initialize WebRTC
+        const webrtcConnection = initWebRTC();
+        
+        // Add event listener for errors
+        videoElement.addEventListener('error', (e) => {
+          console.error('Video element error:', e);
+          fallbackToHLS();
+        });
+      } else {
+        console.warn('WebRTC not supported in this browser, falling back to HLS immediately');
+        fallbackToHLS();
+      }
+      WEBRTC CHECK COMMENTED OUT - END */
+      
+      // PTZ panel functionality
       const ptzPanel = document.getElementById('ptz-control-panel');
       const dragHandle = document.getElementById('drag-handle');
       const initialHeight = ptzPanel.offsetHeight;
@@ -843,84 +1050,6 @@
         });
       }
     });
-  </script>
-
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.1.5"></script>
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script>
-    const create = () => {
-      const video = document.getElementById('video');
-
-      // always prefer hls.js over native HLS.
-      // this is because some Android versions support native HLS
-      // but don't support fMP4s.
-      if (Hls.isSupported()) {
-        const hls = new Hls({
-          // Low latency mode settings
-          lowLatencyMode: true,
-          liveSyncDuration: 1,
-          liveMaxLatencyDuration: 2,
-          liveDurationInfinity: true,
-          
-          // Buffer settings
-          maxBufferLength: 4,
-          maxMaxBufferLength: 6,
-          backBufferLength: 0,
-          
-          // Playback settings
-          maxLiveSyncPlaybackRate: 1.5,
-          
-          // Error recovery settings
-          fragLoadingMaxRetry: 6,
-          manifestLoadingMaxRetry: 6,
-          levelLoadingMaxRetry: 6,
-          fragLoadingRetryDelay: 500,
-          manifestLoadingRetryDelay: 500,
-          levelLoadingRetryDelay: 500,
-          
-          // Watchdog settings
-          highBufferWatchdogPeriod: 1,
-          
-          // Debug settings (disable in production)
-          debug: false
-        });
-
-        hls.on(Hls.Events.ERROR, (evt, data) => {
-          console.warn('HLS Error:', data.type, data.details);
-          
-          if (data.fatal) {
-            console.error('Fatal HLS error:', data.type, data.details);
-            hls.destroy();
-            setTimeout(create, 2000);
-          }
-        });
-        
-        // Add event listeners for monitoring
-        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-          console.log('HLS: Media attached');
-        });
-        
-        hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
-          console.log('HLS: Manifest parsed, found ' + data.levels.length + ' quality level(s)');
-        });
-        
-        hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
-          console.log('HLS: Switched to quality level ' + data.level);
-        });
-
-        hls.loadSource('/feed/index.m3u8');
-        hls.attachMedia(video);
-        
-        // Auto-play when possible
-        video.addEventListener('canplay', () => {
-          video.play().catch(e => console.log('Auto-play prevented:', e));
-        });
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = '/feed/index.m3u8';
-      }
-    };
-
-    document.addEventListener('DOMContentLoaded', create);
   </script>
 </body>
 
