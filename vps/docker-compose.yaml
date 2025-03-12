@@ -1,7 +1,7 @@
 services:
   swag:
     restart: always
-    image: linuxserver/swag:latest
+    image: linuxserver/swag:3.3.0
     environment:
       - URL=${URL}
       - VALIDATION=http
@@ -20,9 +20,6 @@ services:
       - CAMERA_PAN_SPEED=${CAMERA_PAN_SPEED}
       - CAMERA_TILT_SPEED=${CAMERA_TILT_SPEED}
       - CAMERA_TIMEOUT=${CAMERA_TIMEOUT}
-    ports:
-      - "443:443"
-      - "80:80"
     volumes:
       - ./config:/config
       - ./custom-cont-init.d:/custom-cont-init.d
@@ -59,11 +56,10 @@ services:
 
   rtsp-proxy:
     restart: always
-    image: bluenviron/mediamtx:latest
-    ports:
-      - "8888:8888"
+    image: bluenviron/mediamtx:1.11.3
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
+      - ./config:/config:ro
     network_mode: host
     depends_on:
       tailscale:
@@ -78,8 +74,6 @@ services:
   chicky-control:
     restart: always
     build: ./chicky-control
-    ports:
-      - "3000:3000"
     environment:
       - PORT=3000
       - CHICKY_AUTH_TOKEN=${CHICKY_AUTH_TOKEN}
