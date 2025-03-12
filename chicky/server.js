@@ -10,6 +10,9 @@ const authToken = process.env.AUTH_TOKEN;
 const servo1Pin = parseInt(process.env.SERVO1_PIN || '15', 10);
 const servo2Pin = parseInt(process.env.SERVO2_PIN || '14', 10);
 const debug = process.env.DEBUG === 'true' || false;
+const allowedStartHour = parseInt(process.env.ALLOWED_START_HOUR || '5', 10); // Default 5am
+const allowedEndHour = parseInt(process.env.ALLOWED_END_HOUR || '19', 10);   // Default 7pm
+const timeZoneOffset = parseInt(process.env.TIMEZONE_OFFSET || '10', 10);    // Default AEST+10
 
 // Validate required environment variables
 function validateConfig() {
@@ -158,11 +161,16 @@ function connectToServer() {
     });
 }
 
-// Function to check if current time is within allowed hours (5am to 7pm)
+// Function to check if current time is within allowed hours
 function isWithinAllowedHours() {
+    // Get current UTC time from the Pi
     const now = new Date();
-    const hour = now.getHours();
-    return hour >= 5 && hour < 19; // 5am to 7pm (19:00)
+    
+    // Convert to AEST+10 by adding the timezone offset
+    const aestHour = (now.getUTCHours() + timeZoneOffset) % 24;
+    
+    // Check if current hour is within allowed range
+    return aestHour >= allowedStartHour && aestHour < allowedEndHour;
 }
 
 // Function to handle light commands
@@ -170,11 +178,11 @@ function handleLightCommand(data) {
     try {
         // Check if the command is within allowed hours
         if (!isWithinAllowedHours()) {
-            console.log('Light command rejected: outside allowed hours (5am-7pm)');
+            console.log(`Light command rejected: outside allowed hours (${allowedStartHour}am-${allowedEndHour > 12 ? (allowedEndHour - 12) + 'pm' : allowedEndHour + 'am'})`);
             socket.emit('light-confirmation', {
                 success: false,
                 state: data.state,
-                error: 'Sorry, the chicken coop light can only be operated between 5am and 7pm.'
+                error: `Sorry, the chicken coop light can only be operated between ${allowedStartHour}am and ${allowedEndHour > 12 ? (allowedEndHour - 12) + 'pm' : allowedEndHour + 'am'}.`
             });
             return;
         }
@@ -225,11 +233,11 @@ function handleTreatCommand(data) {
     try {
         // Check if the command is within allowed hours
         if (!isWithinAllowedHours()) {
-            console.log('Treat command rejected: outside allowed hours (5am-7pm)');
+            console.log(`Treat command rejected: outside allowed hours (${allowedStartHour}am-${allowedEndHour > 12 ? (allowedEndHour - 12) + 'pm' : allowedEndHour + 'am'})`);
             socket.emit('treat-confirmation', {
                 success: false,
                 servo: data.servo || 'servo1',
-                error: 'Sorry, treats can only be dispensed between 5am and 7pm.'
+                error: `Sorry, treats can only be dispensed between ${allowedStartHour}am and ${allowedEndHour > 12 ? (allowedEndHour - 12) + 'pm' : allowedEndHour + 'am'}.`
             });
             return;
         }
