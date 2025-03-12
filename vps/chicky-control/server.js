@@ -73,6 +73,18 @@ io.on('connection', (socket) => {
       
       // Send current light state to the chicky client
       socket.emit('state-sync', { lightState });
+      
+      // Send configuration to the chicky client
+      // Collect all environment variables with chicky_ prefix
+      const chickyConfig = {};
+      for (const [key, value] of Object.entries(process.env)) {
+        if (key.startsWith('chicky_')) {
+          // Store without the prefix for cleaner usage on client
+          chickyConfig[key.substring(7)] = value;
+        }
+      }
+      
+      socket.emit('config-sync', chickyConfig);
     }
   });
   
@@ -161,6 +173,22 @@ io.on('connection', (socket) => {
     
     visitorCount = Math.max(0, visitorCount - 1);
     io.emit('visitor-count', { count: visitorCount });
+  });
+  
+  // Handle config-request event
+  socket.on('config-request', () => {
+    if (chickyClient === socket) {
+      // Collect all environment variables with chicky_ prefix
+      const chickyConfig = {};
+      for (const [key, value] of Object.entries(process.env)) {
+        if (key.startsWith('chicky_')) {
+          // Store without the prefix for cleaner usage on client
+          chickyConfig[key.substring(7)] = value;
+        }
+      }
+      
+      socket.emit('config-sync', chickyConfig);
+    }
   });
 });
 

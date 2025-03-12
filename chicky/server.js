@@ -5,20 +5,40 @@ const dns = require('dns');
 
 const app = express();
 const port = process.env.PORT || 3000;
-const vpsUrl = process.env.REMOTE_WS_URL;
+const vpsUrl = process.env.REMOTE_SERVER;
 const authToken = process.env.AUTH_TOKEN;
-const servo1Pin = parseInt(process.env.SERVO1_PIN || '15', 10);
-const servo2Pin = parseInt(process.env.SERVO2_PIN || '14', 10);
-const debug = process.env.DEBUG === 'true' || false;
-const allowedStartHour = parseInt(process.env.ALLOWED_START_HOUR || '5', 10); // Default 5am
-const allowedEndHour = parseInt(process.env.ALLOWED_END_HOUR || '19', 10);   // Default 7pm
-const timeZoneOffset = parseInt(process.env.TIMEZONE_OFFSET || '10', 10);    // Default AEST+10
+
+// Default configuration object (will be updated from server)
+const config = {
+  servo1_pin: 15,
+  servo2_pin: 14,
+  debug: false,
+  allowed_start_hour: 5,
+  allowed_end_hour: 19,
+  timezone_offset: 10
+};
+
+// Helper function to parse config values with appropriate types
+function parseConfigValue(key, value) {
+  // Boolean conversion
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  
+  // Number conversion for known numeric fields
+  if (['servo1_pin', 'servo2_pin', 'allowed_start_hour', 
+       'allowed_end_hour', 'timezone_offset'].includes(key)) {
+    return parseInt(value, 10);
+  }
+  
+  // Default: return as is
+  return value;
+}
 
 // Validate required environment variables
 function validateConfig() {
     const missingVars = [];
     
-    if (!vpsUrl) missingVars.push('REMOTE_WS_URL');
+    if (!vpsUrl) missingVars.push('REMOTE_SERVER');
     if (!authToken) missingVars.push('AUTH_TOKEN');
     
     if (missingVars.length > 0) {
@@ -54,12 +74,12 @@ let pingInterval; // Add variable to track the ping interval
 
 function connectToServer() {
     console.log(`Connecting to server at ${vpsUrl || 'undefined'}`);
-    console.log(`Debug mode: ${debug ? 'enabled' : 'disabled'}`);
+    console.log(`Debug mode: ${config.debug ? 'enabled' : 'disabled'}`);
     
     // Check if vpsUrl is defined before attempting to connect
     if (!vpsUrl) {
         console.error('Connection failed: Server URL is undefined');
-        console.error('Please set REMOTE_WS_URL environment variable in Balena dashboard');
+        console.error('Please set REMOTE_SERVER environment variable in Balena dashboard');
         return;
     }
     
@@ -108,6 +128,9 @@ function connectToServer() {
     socket.io.on('reconnect', (attempt) => {
         console.log(`Reconnected after ${attempt} attempts`);
         connected = true;
+        
+        // Request updated configuration
+        socket.emit('config-request');
     });
     
     // Error event
@@ -131,18 +154,6 @@ function connectToServer() {
         }
     });
     
-    // Add a ping event to check connection health
-    pingInterval = setInterval(() => {
-        if (connected) {
-            console.log('Sending ping to server...');
-            const startTime = Date.now();
-            socket.emit('ping', {}, () => {
-                const latency = Date.now() - startTime;
-                console.log(`Received pong from server. Latency: ${latency}ms`);
-            });
-        }
-    }, 30000); // Every 30 seconds
-    
     // State sync event
     socket.on('state-sync', (data) => {
         console.log('Received state sync:', data);
@@ -159,6 +170,22 @@ function connectToServer() {
         console.log('Received give treat command:', data);
         handleTreatCommand(data);
     });
+    
+    // Configuration sync event
+    socket.on('config-sync', (serverConfig) => {
+        console.log('Received configuration from server:', serverConfig);
+        
+        // Update all configuration values
+        for (const [key, value] of Object.entries(serverConfig)) {
+            config[key] = parseConfigValue(key, value);
+        }
+        
+        // Log the updated configuration
+        console.log('Applied new configuration:');
+        for (const [key, value] of Object.entries(config)) {
+            console.log(`- ${key}: ${value}`);
+        }
+    });
 }
 
 // Function to check if current time is within allowed hours
@@ -167,10 +194,10 @@ function isWithinAllowedHours() {
     const now = new Date();
     
     // Convert to AEST+10 by adding the timezone offset
-    const aestHour = (now.getUTCHours() + timeZoneOffset) % 24;
+    const aestHour = (now.getUTCHours() + config.timezone_offset) % 24;
     
     // Check if current hour is within allowed range
-    return aestHour >= allowedStartHour && aestHour < allowedEndHour;
+    return aestHour >= config.allowed_start_hour && aestHour < config.allowed_end_hour;
 }
 
 // Function to handle light commands
@@ -178,11 +205,11 @@ function handleLightCommand(data) {
     try {
         // Check if the command is within allowed hours
         if (!isWithinAllowedHours()) {
-            console.log(`Light command rejected: outside allowed hours (${allowedStartHour}am-${allowedEndHour > 12 ? (allowedEndHour - 12) + 'pm' : allowedEndHour + 'am'})`);
+            console.log(`Light command rejected: outside allowed hours (${config.allowed_start_hour}am-${config.allowed_end_hour > 12 ? (config.allowed_end_hour - 12) + 'pm' : config.allowed_end_hour + 'am'})`);
             socket.emit('light-confirmation', {
                 success: false,
                 state: data.state,
-                error: `Sorry, the chicken coop light can only be operated between ${allowedStartHour}am and ${allowedEndHour > 12 ? (allowedEndHour - 12) + 'pm' : allowedEndHour + 'am'}.`
+                error: `Sorry, the chicken coop light can only be operated between ${config.allowed_start_hour}am and ${config.allowed_end_hour > 12 ? (config.allowed_end_hour - 12) + 'pm' : config.allowed_end_hour + 'am'}.`
             });
             return;
         }
@@ -233,11 +260,11 @@ function handleTreatCommand(data) {
     try {
         // Check if the command is within allowed hours
         if (!isWithinAllowedHours()) {
-            console.log(`Treat command rejected: outside allowed hours (${allowedStartHour}am-${allowedEndHour > 12 ? (allowedEndHour - 12) + 'pm' : allowedEndHour + 'am'})`);
+            console.log(`Treat command rejected: outside allowed hours (${config.allowed_start_hour}am-${config.allowed_end_hour > 12 ? (config.allowed_end_hour - 12) + 'pm' : config.allowed_end_hour + 'am'})`);
             socket.emit('treat-confirmation', {
                 success: false,
                 servo: data.servo || 'servo1',
-                error: `Sorry, treats can only be dispensed between ${allowedStartHour}am and ${allowedEndHour > 12 ? (allowedEndHour - 12) + 'pm' : allowedEndHour + 'am'}.`
+                error: `Sorry, treats can only be dispensed between ${config.allowed_start_hour}am and ${config.allowed_end_hour > 12 ? (config.allowed_end_hour - 12) + 'pm' : config.allowed_end_hour + 'am'}.`
             });
             return;
         }
@@ -246,9 +273,9 @@ function handleTreatCommand(data) {
         let servoValue;
         
         if (servo === 'servo1') {
-            servoValue = servo1Pin;
+            servoValue = config.servo1_pin;
         } else if (servo === 'servo2') {
-            servoValue = servo2Pin;
+            servoValue = config.servo2_pin;
         } else {
             console.error('Invalid servo:', servo);
             socket.emit('treat-confirmation', {
@@ -325,7 +352,7 @@ app.get('/status', (req, res) => {
         config: {
             vpsUrl: vpsUrl,
             authTokenConfigured: !!authToken,
-            debug: debug
+            debug: config.debug
         },
         system: {
             uptime: process.uptime(),
