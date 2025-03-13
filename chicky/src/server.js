@@ -38,25 +38,21 @@ async function startServer() {
         checkDns(config.vpsUrl)
           .then(() => {
             // Connect to the server
+            // The scheduler will be set up when the configuration is received
             const { socket } = connectToServer(config, (updatedConfig) => {
               // Update scheduler when config changes
-              updateScheduler(updatedConfig, socket, () => true);
+              updateScheduler(updatedConfig, socket, () => socket && socket.connected);
             });
-            
-            // Set up the automatic light shutoff
-            updateScheduler(config, socket, () => true);
           })
           .catch((error) => {
             logger.error(`DNS lookup failed: ${error.message}`);
             
             // Connect to the server anyway
+            // The scheduler will be set up when the configuration is received
             const { socket } = connectToServer(config, (updatedConfig) => {
               // Update scheduler when config changes
-              updateScheduler(updatedConfig, socket, () => true);
+              updateScheduler(updatedConfig, socket, () => socket && socket.connected);
             });
-            
-            // Set up the automatic light shutoff
-            updateScheduler(config, socket, () => true);
           });
       } catch (error) {
         logger.error(`Invalid URL format: ${error.message}`);
@@ -105,4 +101,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { startServer }; 
+module.exports = { startServer };
