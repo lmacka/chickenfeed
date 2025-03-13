@@ -1,4 +1,4 @@
-name: Deploy to Balena
+name: Deploy chicky to Balena
 
 on:
   push:
@@ -13,20 +13,17 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
+        
       # Bump version in package.json
       - name: Bump version in package.json
         id: version-bump
         uses: phips28/gh-action-bump-version@master
         with:
-          minor-wording: 'feat,feature,minor'
-          major-wording: 'BREAKING CHANGE,major'
-          default: 'patch'
           tag-prefix: 'v'
           commit-message: 'ci: bump version to {{version}}'
           PACKAGEJSON_DIR: 'chicky'
+          # Always bump regardless of commit messages
+          bump-policy: 'ignore'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
