@@ -21,8 +21,6 @@ jobs:
         with:
           commit-message: 'ci: bump version to {{version}}'
           PACKAGEJSON_DIR: 'chicky'
-          # Always bump regardless of commit messages
-          bump-policy: 'ignore'
           skip-push:  'true' # Let the next action push the changes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
