@@ -24,17 +24,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Update version in balena.yml to match package.json
+      # Manually update version in balena.yml
       - name: Update version in balena.yml
-        uses: fjogeleit/yaml-update-action@main
-        with:
-          valueFile: 'chicky/balena.yml'
-          propertyPath: 'version'
-          value: ${{ steps.version-bump.outputs.newTag }}
-          commitChange: true
-          updateFile: true
-          message: 'ci: update package.json & balena.yml version to ${{ steps.version-bump.outputs.newTag }}'
-          branch: main
+        run: |
+          # Install yq
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          
+          # Update version in balena.yml
+          yq -i '.version = "${{ steps.version-bump.outputs.newTag }}"' chicky/balena.yml
+          
+          # Commit and push changes
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add chicky/balena.yml
+          git commit -m "ci: update package.json & balena.yml version to ${{ steps.version-bump.outputs.newTag }}"
+          git push
 
       # Deploy to Balena
       - name: Deploy to Balena
