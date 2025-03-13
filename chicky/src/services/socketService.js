@@ -11,6 +11,17 @@ const { handleTreatCommand } = require('../controllers/treatController');
 let socket;
 let connected = false;
 let pingInterval;
+let configRequested = false;
+let lastConfigHash = '';
+
+/**
+ * Simple hash function for configuration objects
+ * @param {Object} obj - The object to hash
+ * @returns {string} A string hash of the object
+ */
+function hashConfig(obj) {
+  return JSON.stringify(obj);
+}
 
 /**
  * Connect to the remote server
@@ -32,6 +43,10 @@ function connectToServer(config, onConfigUpdate) {
   if (pingInterval) {
     clearInterval(pingInterval);
   }
+  
+  // Reset config requested flag
+  configRequested = false;
+  lastConfigHash = '';
   
   // Create Socket.IO client with WebSocket-only transport
   const socketOptions = {
@@ -58,13 +73,17 @@ function connectToServer(config, onConfigUpdate) {
     socket.emit('authenticate', authData);
     
     // Request configuration from the server
-    socket.emit('config-request');
+    if (!configRequested) {
+      socket.emit('config-request');
+      configRequested = true;
+    }
   });
   
   // Disconnection event
   socket.on('disconnect', (reason) => {
     logger.info(`Disconnected from server: ${reason}`);
     connected = false;
+    configRequested = false;
   });
   
   // Reconnection attempt event
@@ -78,7 +97,10 @@ function connectToServer(config, onConfigUpdate) {
     connected = true;
     
     // Request updated configuration
-    socket.emit('config-request');
+    if (!configRequested) {
+      socket.emit('config-request');
+      configRequested = true;
+    }
   });
   
   // Error event
@@ -122,6 +144,14 @@ function connectToServer(config, onConfigUpdate) {
   // Configuration sync event
   socket.on('config-sync', (serverConfig) => {
     logger.info('Received configuration from server:', serverConfig);
+    
+    // Check if this is a duplicate configuration
+    const configHash = hashConfig(serverConfig);
+    if (configHash === lastConfigHash) {
+      logger.info('Ignoring duplicate configuration');
+      return;
+    }
+    lastConfigHash = configHash;
     
     // Map server config keys to local config keys if needed
     const configMapping = {
