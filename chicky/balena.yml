@@ -1,27 +1,24 @@
 name: chickenfeed-pi
 type: sw.application
-description: >-
-  Raspberry Pi component of the Chickenfeed project
+description: Raspberry Pi component of the Chickenfeed project
 assets:
   repository:
     type: blob.asset
     data:
-      url: 'https://github.com/lmacka/chickenfeed'
+      url: https://github.com/lmacka/chickenfeed
   logo:
     type: blob.asset
     data:
-      url: 'https://raw.githubusercontent.com/lmacka/chickenfeed/refs/heads/main/docs/chickenfeed.webp'
+      url: https://raw.githubusercontent.com/lmacka/chickenfeed/refs/heads/main/docs/chickenfeed.webp
 data:
   applicationEnvironmentVariables:
-    # Only essential configuration - everything else comes from the server
-    - REMOTE_SERVER: 'wss://onlychicks.tv'
+    - REMOTE_SERVER: wss://onlychicks.tv
     - PORT: '3000'
-    # AUTH_TOKEN is set as a device variable in the Balena dashboard
   defaultDeviceType: raspberry-pi5
   supportedDeviceTypes:
     - raspberry-pi5
   deviceConfiguration:
-    - BALENA_HOST_CONFIG_dtoverlay: 'pwm'
-    - BALENA_HOST_CONFIG_dtparam: 'i2c_arm=on'
-    - BALENA_HOST_CONFIG_dtparam: 'spi=on'
-version: 1.0.2 
+    - BALENA_HOST_CONFIG_dtoverlay: pwm
+    - BALENA_HOST_CONFIG_dtparam: i2c_arm=on
+    - BALENA_HOST_CONFIG_dtparam: spi=on
+version: 1.0.3
