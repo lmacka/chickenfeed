@@ -24,4 +24,4 @@ data:
     - BALENA_HOST_CONFIG_dtoverlay: 'pwm'
     - BALENA_HOST_CONFIG_dtparam: 'i2c_arm=on'
     - BALENA_HOST_CONFIG_dtparam: 'spi=on'
-version: 1.0.1 
+version: 1.0.2 

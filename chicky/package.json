@@ -1,6 +1,6 @@
 {
   "name": "chickenfeed-pi",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Raspberry Pi component of the Chickenfeed project",
   "main": "index.js",
   "scripts": {
