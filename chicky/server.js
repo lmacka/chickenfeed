@@ -2,6 +2,7 @@ const express = require('express');
 const { spawnSync } = require('child_process');
 const { io } = require('socket.io-client');
 const dns = require('dns');
+const schedule = require('node-schedule');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -71,6 +72,7 @@ app.get('/health', (req, res) => {
 let socket;
 let connected = false;
 let pingInterval; // Add variable to track the ping interval
+let lightShutoffJob; // Add variable to track the light shutoff job
 
 function connectToServer() {
     console.log(`Connecting to server at ${vpsUrl || 'undefined'}`);
@@ -185,6 +187,12 @@ function connectToServer() {
         for (const [key, value] of Object.entries(config)) {
             console.log(`- ${key}: ${value}`);
         }
+        
+        // Restart the light shutoff scheduler with the new end hour
+        if (lightShutoffJob) {
+            lightShutoffJob.cancel();
+        }
+        lightShutoffJob = setupAutoLightShutoff();
     });
 }
 
@@ -340,6 +348,48 @@ function handleTreatCommand(data) {
     }
 }
 
+// Function to automatically turn off lights at the configured end hour
+function setupAutoLightShutoff() {
+    console.log(`Setting up automatic light shutoff at hour ${config.allowed_end_hour}`);
+    
+    // Schedule the job to run every hour
+    const job = schedule.scheduleJob('0 * * * *', () => {
+        // Get current hour in the configured timezone
+        const now = new Date();
+        const currentHour = (now.getUTCHours() + config.timezone_offset) % 24;
+        
+        // Check if it's time to turn off the lights
+        if (currentHour === config.allowed_end_hour) {
+            console.log(`Auto-shutdown: Turning off lights at configured end hour (${config.allowed_end_hour})`);
+            
+            try {
+                // Run the Python script to turn off the light
+                const result = spawnSync('python3', ['light.py', 'off']);
+                
+                if (result.error) {
+                    console.error('Error executing light shutdown script:', result.error);
+                } else {
+                    console.log('Lights turned off successfully by auto-shutdown');
+                    
+                    // Notify the server about the state change if connected
+                    if (connected) {
+                        socket.emit('light-confirmation', {
+                            success: true,
+                            state: 'off',
+                            automatic: true
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error in automatic light shutdown:', error);
+            }
+        }
+    });
+    
+    console.log('Automatic light shutoff scheduled');
+    return job;
+}
+
 // Add a connection status endpoint
 app.get('/status', (req, res) => {
     res.status(200).json({
@@ -477,6 +527,9 @@ app.listen(port, '0.0.0.0', () => {
     
     // Validate configuration
     const isConfigValid = validateConfig();
+    
+    // Set up the automatic light shutoff
+    lightShutoffJob = setupAutoLightShutoff();
     
     // If vpsUrl is defined, try to connect
     if (vpsUrl) {
