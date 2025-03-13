@@ -1,0 +1,57 @@
+name: Deploy to Balena
+
+on:
+  push:
+    paths:
+      - 'chicky/**'
+
+jobs:
+  version-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      # Bump version in package.json
+      - name: Bump version in package.json
+        id: version-bump
+        uses: phips28/gh-action-bump-version@master
+        with:
+          minor-wording: 'feat,feature,minor'
+          major-wording: 'BREAKING CHANGE,major'
+          default: 'patch'
+          tag-prefix: 'v'
+          commit-message: 'ci: bump version to {{version}}'
+          PACKAGEJSON_DIR: 'chicky'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Update version in balena.yml to match package.json
+      - name: Update version in balena.yml
+        uses: fjogeleit/yaml-update-action@main
+        with:
+          valueFile: 'chicky/balena.yml'
+          propertyPath: 'version'
+          value: ${{ steps.version-bump.outputs.newTag }}
+          commitChange: false
+
+      # Deploy to Balena
+      - name: Deploy to Balena
+        uses: balena-io/deploy-to-balena-action@master
+        id: balena-deploy
+        with:
+          balena_token: ${{ secrets.BALENA_TOKEN }}
+          fleet: ${{ secrets.BALENA_FLEET }}
+          environment: balena-cloud.com
+          create_tag: true
+          source: chicky
+          layer_cache: true
+          debug: false
+
+      # Log release information
+      - name: Log release information
+        run: |
+          echo "Built release ID ${{ steps.balena-deploy.outputs.release_id }}"
+          echo "Release version ${{ steps.balena-deploy.outputs.version }}" 
