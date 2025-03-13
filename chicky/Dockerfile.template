@@ -36,7 +36,7 @@ RUN pip3 install --no-cache-dir --extra-index-url https://www.piwheels.org/simpl
 COPY . .
 
 # Make sure the Python scripts are executable
-RUN chmod +x light.py servocontrol.py
+RUN chmod +x src/hardware/light.py src/hardware/servocontrol.py
 
 # Enable I2C and SPI
 RUN echo "dtparam=i2c_arm=on" >> /boot/config.txt || true
@@ -47,4 +47,4 @@ ENV NODE_ENV=production
 ENV UDEV=on
 
 # Start the application
-CMD ["node", "server.js"] 
+CMD ["node", "index.js"] 

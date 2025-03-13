@@ -13,11 +13,9 @@ assets:
       url: 'https://raw.githubusercontent.com/lmacka/chickenfeed/refs/heads/main/docs/chickenfeed.webp'
 data:
   applicationEnvironmentVariables:
-    - REMOTE_WS_URL: 'wss://onlychicks.tv'
+    # Only essential configuration - everything else comes from the server
+    - REMOTE_SERVER: 'wss://onlychicks.tv'
     - PORT: '3000'
-    - DEBUG: 'false'
-    - SERVO1_PIN: '15'
-    - SERVO2_PIN: '14'
     # AUTH_TOKEN is set as a device variable in the Balena dashboard
   defaultDeviceType: raspberry-pi5
   supportedDeviceTypes:
