@@ -19,11 +19,11 @@ jobs:
         id: version-bump
         uses: phips28/gh-action-bump-version@master
         with:
-          tag-prefix: 'v'
           commit-message: 'ci: bump version to {{version}}'
           PACKAGEJSON_DIR: 'chicky'
           # Always bump regardless of commit messages
           bump-policy: 'ignore'
+          skip-push:  'true' # Let the next action push the changes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -34,7 +34,7 @@ jobs:
           valueFile: 'chicky/balena.yml'
           propertyPath: 'version'
           value: ${{ steps.version-bump.outputs.newTag }}
-          commitChange: false
+          commitChange: true
 
       # Deploy to Balena
       - name: Deploy to Balena
