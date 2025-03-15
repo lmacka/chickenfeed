@@ -25,4 +25,4 @@ if __name__ == "__main__":
         relay_off()
     else:
         print("Invalid argument. Use 'on' or 'off'.")
-        sys.exit(1)
+        sys.exit(1) 

@@ -1,6 +1,1 @@
 automationhat==1.0.0
-# System packages installed via apt:
-# - python3-gpiozero
-# - python3-rpi.gpio
-# - python3-libgpiod
-# - python3-smbus

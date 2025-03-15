@@ -1,24 +1,19 @@
-version: '2.1'
+version: '2'
 
 services:
   chicky:
     build: .
     privileged: true
     restart: always
-    ports:
-      - "3000:3000"
-    environment:
-      PORT: "3000"
-      REMOTE_SERVER: "wss://onlychicks.tv"
-      AUTH_TOKEN: "${AUTH_TOKEN}"
+    network_mode: host
     labels:
       io.balena.features.kernel-modules: '1'
       io.balena.features.firmware: '1'
       io.balena.features.dbus: '1'
-      io.balena.features.sysfs: '1'
-      io.balena.features.procfs: '1'
       io.balena.features.supervisor-api: '1'
-    devices:
-      - "/dev/i2c-1:/dev/i2c-1"
-      - "/dev/gpiomem:/dev/gpiomem"
-      - "/dev/gpiochip0:/dev/gpiochip0"
+      io.balena.features.balena-api: '1'
+    environment:
+      - PORT=3000
+      - REMOTE_SERVER=${REMOTE_SERVER}
+      - AUTH_TOKEN=${CHICKY_AUTH_TOKEN}
+      - DEBUG=false 
