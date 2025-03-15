@@ -1,26 +1,21 @@
 #!/bin/bash
-set -e
+# Simple deployment script for Chickenfeed Pi Python version
 
-# Colors
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-NC='\033[0m'
+# Check if balena CLI is installed
+if ! command -v balena &> /dev/null; then
+    echo "Error: balena CLI is not installed. Please install it first."
+    echo "https://github.com/balena-io/balena-cli/blob/master/INSTALL.md"
+    exit 1
+fi
 
-# Print status message
-log() { echo -e "${GREEN}==>${NC} $1"; }
-
-# Main script
-log "Checking requirements"
-
-# Check balena login
-if ! balena whoami &>/dev/null; then
-    log "Logging in to balena"
+# Check if user is logged in
+if ! balena whoami &> /dev/null; then
+    echo "You are not logged in to balena. Please login first:"
     balena login
 fi
 
-# Deploy
-log "Pushing to chickenfeed"
+# Deploy to balena
+echo "Deploying to balena..."
 balena push chickenfeed
 
-log "Deployment completed successfully"
-
+echo "Deployment complete!" 

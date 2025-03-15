@@ -1,0 +1,3 @@
+"""
+Chicky Control Python package
+""" 

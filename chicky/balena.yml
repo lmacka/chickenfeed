@@ -12,8 +12,8 @@ assets:
       url: https://raw.githubusercontent.com/lmacka/chickenfeed/refs/heads/main/docs/chickenfeed.webp
 data:
   applicationEnvironmentVariables:
-    - REMOTE_SERVER: wss://onlychicks.tv
-    - PORT: '3000'
+    - PORT: 3000
+    - DEBUG: false
   defaultDeviceType: raspberry-pi5
   supportedDeviceTypes:
     - raspberry-pi5
