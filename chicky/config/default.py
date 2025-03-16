@@ -17,7 +17,6 @@ config: Dict[str, Any] = {
     "servo2_pin": None,
     
     # Operation settings - these will be provided by the server
-    "debug": os.getenv("DEBUG", "false").lower() == "true",
     "allowed_start_hour": None,
     "allowed_end_hour": None,
     "timezone_offset": None,

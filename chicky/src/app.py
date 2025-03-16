@@ -15,12 +15,6 @@ logger = get_logger(__name__)
 def create_app(config: Dict[str, Any]) -> FastAPI:
     """
     Create and configure the FastAPI application
-    
-    Args:
-        config: Configuration dictionary
-        
-    Returns:
-        FastAPI application
     """
     app = FastAPI(
         title="Chickenfeed Pi",
@@ -29,10 +23,8 @@ def create_app(config: Dict[str, Any]) -> FastAPI:
         lifespan=lifespan
     )
     
-    # Store config in app.state for access in routes
     app.state.config = config
     
-    # Add CORS middleware
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -41,9 +33,6 @@ def create_app(config: Dict[str, Any]) -> FastAPI:
         allow_headers=["*"],
     )
     
-    # Request logging middleware removed to reduce verbosity
-    
-    # Error handler middleware
     @app.middleware("http")
     async def error_handler(request: Request, call_next):
         try:
@@ -55,7 +44,6 @@ def create_app(config: Dict[str, Any]) -> FastAPI:
                 status_code=500
             )
     
-    # Include API routes
     app.include_router(api_router)
     
-    return app 
+    return app

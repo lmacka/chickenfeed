@@ -27,12 +27,6 @@ config_callback = None
 def hash_config(obj: Dict[str, Any]) -> str:
     """
     Simple hash function for configuration objects
-    
-    Args:
-        obj: The object to hash
-        
-    Returns:
-        A string hash of the object
     """
     return hashlib.md5(json.dumps(obj, sort_keys=True).encode()).hexdigest()
 
@@ -42,13 +36,6 @@ async def connect_to_server(
 ) -> Tuple[Optional[socketio.AsyncClient], bool]:
     """
     Connect to the remote server
-    
-    Args:
-        config: Configuration dictionary
-        on_config_update: Callback for configuration updates
-        
-    Returns:
-        Socket and connection status
     """
     global sio, connected, config_requested, last_config_hash, config_callback
     
@@ -82,7 +69,6 @@ async def connect_to_server(
     async def connect():
         global connected, config_requested
         logger.info("Connected to server")
-        logger.info(f"Socket ID: {sio.sid}")
         connected = True
         
         # Authenticate with the server
@@ -100,7 +86,7 @@ async def connect_to_server(
                     }
                     logger.info(f"Attempting authentication (attempt {retry_count + 1}/{max_retries})")
                     response = await sio.call("authenticate", auth_data, timeout=10)
-                    logger.info(f"Authentication response: {response}")
+                    logger.debug(f"Authentication response: {response}")
                     
                     if response.get("success", False):
                         auth_success = True
@@ -110,7 +96,7 @@ async def connect_to_server(
                         if not config_requested:
                             try:
                                 config_response = await sio.call("config_request", {})
-                                logger.info(f"Config request response: {config_response}")
+                                logger.debug(f"Config request response: {config_response}")
                                 config_requested = True
                             except Exception as e:
                                 logger.error(f"Error requesting configuration: {e}")
@@ -175,55 +161,40 @@ async def connect_to_server(
     
     @sio.event
     async def state_sync(data):
-        logger.info(f"Received state sync: {data}")
+        logger.info("Received state sync")
+        logger.debug(f"State sync data: {data}")
         # Process state sync data if needed
     
     @sio.event
-    async def light_command(data, *args):
-        logger.info(f"Received light command: {data}")
-        try:
-            result = handle_light_command(data, config, sio)
-            # Check if a callback was provided (it will be the last argument)
-            if args and callable(args[-1]):
-                callback = args[-1]
-                callback(result)
-            return result
-        except Exception as e:
-            logger.error(f"Error handling light command: {e}")
-            error_result = {
-                "success": False,
-                "state": data.get("state", "unknown"),
-                "error": str(e)
-            }
-            if args and callable(args[-1]):
-                callback = args[-1]
-                callback(error_result)
-            return error_result
+    async def light_command(data):
+        """Handle light command from server"""
+        global sio
+        
+        # Import config here to avoid circular imports
+        from config.default import config
+        
+        # Handle the light command
+        result = await handle_light_command(data, config, sio)
+        
+        return result
     
     @sio.event
-    async def treat_command(data, *args):
-        logger.info(f"Received treat command: {data}")
-        try:
-            result = await handle_treat_command(data, config, sio)
-            # Check if a callback was provided (it will be the last argument)
-            if args and callable(args[-1]):
-                callback = args[-1]
-                callback(result)
-            return result
-        except Exception as e:
-            logger.error(f"Error handling treat command: {e}")
-            error_result = {
-                "success": False,
-                "error": str(e)
-            }
-            if args and callable(args[-1]):
-                callback = args[-1]
-                callback(error_result)
-            return error_result
+    async def treat_command(data):
+        """Handle treat command from server"""
+        global sio
+        
+        # Import config here to avoid circular imports
+        from config.default import config
+        
+        # Handle the treat command
+        result = await handle_treat_command(data, config, sio)
+        
+        return result
     
     @sio.event
     async def light_status(data):
-        logger.info(f"Received light status update: {data}")
+        logger.info("Received light status update")
+        logger.debug(f"Light status data: {data}")
         # Process light status update if needed
     
     # Connect to the server
@@ -233,12 +204,12 @@ async def connect_to_server(
         if not url.startswith(("http://", "https://", "ws://", "wss://")):
             # If no protocol is specified, assume wss:// for secure WebSocket
             url = f"wss://{url}"
-            logger.info(f"No protocol specified, using: {url}")
+            logger.debug(f"No protocol specified, using: {url}")
         
         # Ensure the URL includes the socket.io path
         if "/socket.io" not in url:
             url = f"{url}/socket.io"
-            logger.info(f"Adding socket.io path to URL: {url}")
+            logger.debug(f"Adding socket.io path to URL: {url}")
         
         # Connect with WebSocket transport and improved timeout settings
         await sio.connect(

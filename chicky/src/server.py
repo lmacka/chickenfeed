@@ -4,12 +4,9 @@ Main server for the Chickenfeed Pi component
 import asyncio
 import signal
 import sys
-import platform
-import os
 from typing import Callable, Dict, Any, Optional
 
 import uvicorn
-from fastapi import FastAPI
 
 from src.app import create_app
 from src.utils.logger import get_logger
@@ -51,8 +48,7 @@ async def start_server() -> None:
     # If remote_server is defined, try to connect
     if config["remote_server"]:
         try:
-            # Attempt to connect to the server
-            logger.info(f"Attempting to connect to {config['remote_server']}...")
+            logger.info(f"Connecting to {config['remote_server']}...")
             
             # Perform DNS lookup
             try:
@@ -60,13 +56,10 @@ async def start_server() -> None:
             except Exception as e:
                 logger.error(f"DNS lookup failed: {e}")
             
-            # Define a simple callback function for configuration updates
+            # Define callback function for configuration updates
             def on_config_update(updated_config):
                 try:
-                    # Get the socket instance
                     socket = get_socket()
-                    
-                    # Update the scheduler with the new configuration
                     update_scheduler(updated_config, socket, is_connected)
                 except Exception as e:
                     logger.error(f"Error in config update callback: {e}")

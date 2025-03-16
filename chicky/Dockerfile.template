@@ -10,7 +10,6 @@ RUN apt-get update && apt-get install -y \
     python3-uvicorn \
     python3-socketio \
     python3-apscheduler \
-    python3-rpi.gpio \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set working directory

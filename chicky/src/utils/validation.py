@@ -11,12 +11,6 @@ logger = get_logger(__name__)
 def validate_config(config: Dict[str, Any]) -> bool:
     """
     Validate required environment variables
-    
-    Args:
-        config: Configuration dictionary
-        
-    Returns:
-        True if all required variables are present
     """
     missing_vars = []
     
@@ -35,13 +29,6 @@ def validate_config(config: Dict[str, Any]) -> bool:
 def parse_config_value(key: str, value: Union[str, int, bool]) -> Union[str, int, bool]:
     """
     Parse configuration values with appropriate types
-    
-    Args:
-        key: Configuration key
-        value: Configuration value
-        
-    Returns:
-        Parsed value
     """
     # Boolean conversion
     if value == "true":
@@ -63,12 +50,6 @@ def parse_config_value(key: str, value: Union[str, int, bool]) -> Union[str, int
 def is_within_allowed_hours(config: Dict[str, Any]) -> bool:
     """
     Check if current time is within allowed hours
-    
-    Args:
-        config: Configuration dictionary
-        
-    Returns:
-        True if current time is within allowed hours
     """
     # If the configuration is not yet available, default to false
     if (config.get("allowed_start_hour") is None or 
