@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 import time
 from datetime import datetime
 
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 
 from src.utils.logger import get_logger
@@ -50,13 +50,12 @@ async def status(request: Request) -> Dict[str, Any]:
         },
         "config": {
             "remote_server": config["remote_server"],
-            "auth_token_configured": bool(config["auth_token"]),
-            "debug": config["debug"]
+            "auth_token_configured": bool(config["auth_token"])
         },
         "system": {
             "uptime": time.time() - config.get("start_time", time.time()),
             "memory": {
-                "rss": 0  # Not easily available in Python, would need psutil
+                "rss": 0  # Would need psutil for accurate measurement
             },
             "python_version": ".".join(map(str, __import__("sys").version_info[:3]))
         }
@@ -68,16 +67,12 @@ async def test_connection() -> Dict[str, Any]:
     socket = get_socket()
     
     if not is_connected():
-        logger.warning("Test connection requested but not connected")
         raise HTTPException(
             status_code=503,
             detail="Not connected to server"
         )
     
     start_time = time.time()
-    
-    # This would be implemented in the socket_service.py
-    # For now, we just simulate a successful ping
     latency = int((time.time() - start_time) * 1000)
     
     return {
@@ -139,7 +134,8 @@ async def url_test(request: Request) -> Dict[str, Any]:
         
         return url_info
     except Exception as e:
-        logger.error(f"URL test failed: {e}")
+        logger.error("URL test failed")
+        logger.debug(f"URL test error details: {e}")
         return {
             "success": False,
             "original_url": remote_server,
@@ -159,9 +155,6 @@ async def light_control(request: Request, light_request: LightRequest) -> Dict[s
         
         end_display = f"{allowed_end - 12}pm" if allowed_end > 12 else f"{allowed_end}am"
         
-        message = f"Light command rejected: outside allowed hours ({allowed_start}am-{end_display})"
-        logger.warning(message)
-        
         raise HTTPException(
             status_code=403,
             detail=f"Sorry, the chicken coop light can only be operated between {allowed_start}am and {end_display}."
@@ -177,4 +170,4 @@ async def light_control(request: Request, light_request: LightRequest) -> Dict[s
             detail=result["error"]
         )
     
-    return result 
+    return result

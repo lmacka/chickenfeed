@@ -13,14 +13,6 @@ logger = get_logger(__name__)
 async def handle_treat_command(data: Dict[str, Any], config: Dict[str, Any], socket) -> Dict[str, Any]:
     """
     Handle treat command from remote server
-    
-    Args:
-        data: Command data
-        config: Configuration dictionary
-        socket: Socket.IO client
-        
-    Returns:
-        Result dictionary with success status and other information
     """
     try:
         # Check if the command is within allowed hours
@@ -36,10 +28,8 @@ async def handle_treat_command(data: Dict[str, Any], config: Dict[str, Any], soc
                 message = f"Treat command rejected: outside allowed hours ({allowed_start}am-{end_display})"
                 error_msg = f"Sorry, treats can only be dispensed between {allowed_start}am and {end_display}."
             
-            # Log at warning level only
             logger.warning(message)
             
-            # Return error result
             return {
                 "success": False,
                 "error": error_msg
@@ -51,53 +41,28 @@ async def handle_treat_command(data: Dict[str, Any], config: Dict[str, Any], soc
         
         # Check if servo is configured
         if not servo_pin:
-            error_msg = f"Treat command rejected: {servo} not configured"
-            logger.warning(error_msg)
+            message = f"Treat command rejected: {servo} not configured"
+            logger.warning(message)
             
-            # Return error result
             return {
                 "success": False,
-                "error": error_msg
+                "error": f"Sorry, the treat dispenser is not properly configured."
             }
         
-        # Dispense treat
+        # Dispense the treat
         result = await dispense_treat(servo, servo_pin)
+        
+        # Emit the result to the server
+        if socket and hasattr(socket, "emit"):
+            try:
+                await socket.emit("treat_result", result)
+            except Exception as e:
+                logger.error(f"Error emitting treat result: {e}")
+        
         return result
     except Exception as e:
         logger.error(f"Error handling treat command: {e}")
         return {
             "success": False,
             "error": str(e)
-        }
-
-async def auto_treat_schedule(config: Dict[str, Any], socket, connected: bool) -> None:
-    """
-    Automatically dispense treats at scheduled times
-    
-    Args:
-        config: Configuration dictionary
-        socket: Socket.IO client
-        connected: Whether the socket is connected
-    """
-    # Check if configuration is available
-    if not config.get("treat_schedule"):
-        logger.warning("Auto-treat skipped: treat_schedule not configured")
-        return
-    
-    # Get servo configuration
-    servo = "servo1"  # Default to servo1 for scheduled treats
-    servo_pin = config.get(f"{servo}_pin")
-    
-    # Check if servo is configured
-    if not servo_pin:
-        logger.warning(f"Auto-treat skipped: {servo} not configured")
-        return
-    
-    # Reduced to warning level
-    logger.warning(f"Auto-treat: Dispensing treat according to schedule")
-    
-    try:
-        # Dispense treat
-        await dispense_treat(servo, servo_pin)
-    except Exception as e:
-        logger.error(f"Error in automatic treat dispensing: {e}") 
+        } 

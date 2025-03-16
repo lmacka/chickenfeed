@@ -3,6 +3,7 @@ Scheduler service for handling scheduled tasks
 """
 from typing import Dict, Any, Callable, Optional
 from datetime import datetime
+import asyncio
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -23,23 +24,12 @@ def setup_auto_light_shutoff(
 ) -> Optional[int]:
     """
     Set up automatic light shutoff at the configured end hour
-    
-    Args:
-        config: Configuration dictionary
-        socket: Socket.IO client
-        is_connected: Function to check if socket is connected
-        
-    Returns:
-        Job ID or None if setup failed
     """
     global light_shutoff_job
     
-    # Check if configuration is available
     if config.get("allowed_end_hour") is None:
         logger.warning("Auto light shutoff setup skipped: configuration not yet available")
         return None
-    
-    logger.info(f"Setting up automatic light shutoff at hour {config['allowed_end_hour']}")
     
     # Cancel existing job if it exists
     if light_shutoff_job:
@@ -62,7 +52,6 @@ def setup_auto_light_shutoff(
         )
         
         light_shutoff_job = job.id
-        logger.info("Automatic light shutoff scheduled")
         return job.id
     except Exception as e:
         logger.error(f"Error scheduling light shutoff job: {e}")
@@ -75,14 +64,8 @@ def check_auto_shutoff(
 ) -> None:
     """
     Check if it's time to turn off the lights
-    
-    Args:
-        config: Configuration dictionary
-        socket: Socket.IO client
-        is_connected: Function to check if socket is connected
     """
     try:
-        # Check if timezone_offset is configured
         if config.get("timezone_offset") is None:
             logger.warning("Auto light shutoff check skipped: timezone_offset not configured")
             return
@@ -93,9 +76,8 @@ def check_auto_shutoff(
         
         # Check if it's time to turn off the lights
         if current_hour == config["allowed_end_hour"]:
-            # Call is_connected to get the current connection status
-            connected = is_connected()
-            auto_shutoff_light(config, socket, connected)
+            # Create a task to run the async function
+            asyncio.create_task(auto_shutoff_light(socket, is_connected))
     except Exception as e:
         logger.error(f"Error in auto shutoff check: {e}")
 
@@ -106,11 +88,6 @@ def update_scheduler(
 ) -> None:
     """
     Update scheduler with new configuration
-    
-    Args:
-        config: Configuration dictionary
-        socket: Socket.IO client
-        is_connected: Function to check if socket is connected
     """
     global light_shutoff_job
     try:

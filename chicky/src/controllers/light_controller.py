@@ -10,17 +10,9 @@ from src.hardware.hardware_interface import control_light
 
 logger = get_logger(__name__)
 
-def handle_light_command(data: Dict[str, Any], config: Dict[str, Any], socket) -> Dict[str, Any]:
+async def handle_light_command(data: Dict[str, Any], config: Dict[str, Any], socket) -> Dict[str, Any]:
     """
     Handle light command from remote server
-    
-    Args:
-        data: Command data
-        config: Configuration dictionary
-        socket: Socket.IO client
-        
-    Returns:
-        Result dictionary with success status and other information
     """
     try:
         # Check if the command is within allowed hours
@@ -36,10 +28,8 @@ def handle_light_command(data: Dict[str, Any], config: Dict[str, Any], socket) -
                 message = f"Light command rejected: outside allowed hours ({allowed_start}am-{end_display})"
                 error_msg = f"Sorry, the chicken coop light can only be operated between {allowed_start}am and {end_display}."
             
-            # Log at warning level only
             logger.warning(message)
             
-            # Return error result
             return {
                 "success": False,
                 "state": data.get("state", "unknown"),
@@ -48,6 +38,14 @@ def handle_light_command(data: Dict[str, Any], config: Dict[str, Any], socket) -
 
         # Control the light
         result = control_light(data.get("state", "off"))
+        
+        # Emit the result to the server
+        if socket and hasattr(socket, "emit"):
+            try:
+                await socket.emit("light_result", result)
+            except Exception as e:
+                logger.error(f"Error emitting light result: {e}")
+        
         return result
     except Exception as e:
         logger.error(f"Error handling light command: {e}")
@@ -57,33 +55,31 @@ def handle_light_command(data: Dict[str, Any], config: Dict[str, Any], socket) -
             "error": str(e)
         }
 
-async def auto_shutoff_light(config: Dict[str, Any], socket, connected: bool) -> None:
+async def auto_shutoff_light(socket, is_connected: Callable[[], bool]) -> Dict[str, Any]:
     """
-    Automatically turn off lights at the configured end hour
-    
-    Args:
-        config: Configuration dictionary
-        socket: Socket.IO client
-        connected: Whether the socket is connected
+    Automatically shut off the light at the end of the allowed hours
     """
-    # Check if configuration is available
-    if config.get("allowed_end_hour") is None:
-        logger.warning("Auto-shutdown skipped: configuration not yet available")
-        return
-    
-    # Reduced to warning level
-    logger.warning(f"Auto-shutdown: Turning off lights at configured end hour ({config['allowed_end_hour']})")
-    
     try:
-        # Turn off the light
+        logger.info("Auto shutoff: turning light off")
+        
+        # Control the light
         result = control_light("off")
         
-        # Notify the server about the state change if connected
-        if connected and socket and hasattr(socket, 'emit') and result.get("success", False):
-            await socket.emit("light_status", {
-                "success": True,
-                "state": "off",
-                "automatic": True
-            })
+        # Emit the result to the server if connected
+        if is_connected() and socket and hasattr(socket, "emit"):
+            try:
+                await socket.emit("light_result", {
+                    "success": result["success"],
+                    "state": "off",
+                    "auto": True
+                })
+            except Exception as e:
+                logger.error(f"Error emitting auto shutoff result: {e}")
+        
+        return result
     except Exception as e:
-        logger.error(f"Error in automatic light shutdown: {e}") 
+        logger.error(f"Error in auto shutoff: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }

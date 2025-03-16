@@ -1,9 +1,6 @@
 """
 Lifecycle management for the FastAPI application
 """
-import sys
-import platform
-import os
 from contextlib import asynccontextmanager
 from typing import Dict, Any
 

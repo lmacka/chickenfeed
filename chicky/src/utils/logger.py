@@ -17,16 +17,10 @@ logging.basicConfig(
 def get_logger(name: Optional[str] = None) -> logging.Logger:
     """
     Get a logger instance
-    
-    Args:
-        name: Logger name
-        
-    Returns:
-        Logger instance
     """
     logger = logging.getLogger(name)
     
-    # Import here to avoid circular imports
+    # Set log level based on config
     try:
         from config.default import config
         if config.get("debug", False):
