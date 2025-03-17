@@ -6,7 +6,7 @@ import logging
 import asyncio
 from typing import Dict, Any, Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Request
 from pydantic import BaseModel
 import socketio
 
@@ -16,6 +16,8 @@ from app.services.socket_service import (
     get_visitor_count,
     get_chicky_client,
     get_socketio_server,
+    get_current_controller,
+    CONTROL_TIMEOUT_SECONDS,
 )
 
 # Configure logging
@@ -50,6 +52,11 @@ class LightToggleResponse(BaseModel):
 class TreatResponse(BaseModel):
     success: bool
     message: str
+
+class ControlStatusResponse(BaseModel):
+    inUse: bool
+    userId: Optional[str]
+    timeoutSeconds: int
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check() -> Dict[str, Any]:
@@ -104,9 +111,25 @@ async def websocket_check() -> Dict[str, Any]:
         "lightState": "on" if get_light_state() else "off"
     }
 
+@router.get("/control-status", response_model=ControlStatusResponse)
+async def control_status() -> Dict[str, Any]:
+    """
+    Get control status
+    
+    Returns:
+        Current control status
+    """
+    current_controller = get_current_controller()
+    
+    return {
+        "inUse": current_controller is not None,
+        "userId": current_controller,
+        "timeoutSeconds": CONTROL_TIMEOUT_SECONDS
+    }
+
 @router.post("/toggle-light", response_model=LightToggleResponse)
 @router.get("/toggle-light", response_model=LightToggleResponse)
-async def toggle_light() -> Dict[str, Any]:
+async def toggle_light(request: Request) -> Dict[str, Any]:
     """
     Toggle light endpoint
     
@@ -141,6 +164,21 @@ async def toggle_light() -> Dict[str, Any]:
             }
         )
     
+    # Check if the client has control
+    client_id = request.headers.get("X-Socket-ID")
+    current_controller = get_current_controller()
+    
+    if client_id != current_controller:
+        logger.error(f"Toggle light failed: Client {client_id} does not have control (current controller: {current_controller})")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "success": False,
+                "message": "You do not have control",
+                "state": "on" if get_light_state() else "off"
+            }
+        )
+    
     sid = chicky_client["sid"]
     
     # Toggle the light state
@@ -166,6 +204,10 @@ async def toggle_light() -> Dict[str, Any]:
             response["state"] = light_state_str
             logger.warning(f"Light toggle response missing 'state' field, using requested state: {light_state_str}")
         
+        # Reset control timeout
+        if client_id and client_id == current_controller:
+            await sio.emit("command_executed", {}, room=client_id)
+        
         return {
             "success": response["success"],
             "message": response.get("error", f"Light {'turned on' if response['state'] == 'on' else 'turned off'}"),
@@ -185,7 +227,7 @@ async def toggle_light() -> Dict[str, Any]:
 
 @router.post("/give-treat", response_model=TreatResponse)
 @router.get("/give-treat", response_model=TreatResponse)
-async def give_treat() -> Dict[str, Any]:
+async def give_treat(request: Request) -> Dict[str, Any]:
     """
     Give treat endpoint
     
@@ -218,6 +260,20 @@ async def give_treat() -> Dict[str, Any]:
             }
         )
     
+    # Check if the client has control
+    client_id = request.headers.get("X-Socket-ID")
+    current_controller = get_current_controller()
+    
+    if client_id != current_controller:
+        logger.error(f"Give treat failed: Client {client_id} does not have control (current controller: {current_controller})")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "success": False,
+                "message": "You do not have control"
+            }
+        )
+    
     logger.info("Giving treat")
     
     try:
@@ -231,6 +287,11 @@ async def give_treat() -> Dict[str, Any]:
         
         # Handle response
         logger.info(f"Received treat dispense response: {response}")
+        
+        # Reset control timeout
+        if client_id and client_id == current_controller:
+            await sio.emit("command_executed", {}, room=client_id)
+        
         return {
             "success": response["success"],
             "message": response.get("error", "Treat dispensed successfully!")

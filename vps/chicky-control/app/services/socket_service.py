@@ -3,6 +3,7 @@ Socket.IO service for handling WebSocket communication with clients
 """
 import os
 import logging
+import asyncio
 from typing import Dict, Any, Optional, List
 
 import socketio
@@ -11,11 +12,19 @@ from fastapi import FastAPI
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# Get control timeout from environment variable with fallback to 30 seconds
+CONTROL_TIMEOUT_SECONDS = int(os.environ.get('CONTROL_TIMEOUT_SECONDS', 30))
+logger.info(f"Control timeout set to {CONTROL_TIMEOUT_SECONDS} seconds")
+
 # Global state
 light_state = False
 visitor_count = 0
 chicky_client = None
 socketio_server = None
+
+# Control system variables
+current_controller = None
+control_timeout = None
 
 def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
     """
@@ -61,7 +70,14 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
         visitor_count += 1
         
         # Send visitor count to all clients
-        await sio.emit("visitor_count", {"count": visitor_count})
+        await sio.emit("visitor-count", {"count": visitor_count})
+        
+        # Send control status to the new client
+        await sio.emit("control-status", {
+            "inUse": current_controller is not None,
+            "userId": current_controller,
+            "timeoutSeconds": CONTROL_TIMEOUT_SECONDS
+        }, room=sid)
     
     @sio.event
     async def disconnect(sid):
@@ -71,7 +87,7 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
         Args:
             sid: Session ID
         """
-        global visitor_count, chicky_client
+        global visitor_count, chicky_client, current_controller, control_timeout
         logger.info(f"Client disconnected: {sid}")
         
         # If the chicky client disconnected, clear the reference
@@ -79,8 +95,24 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
             logger.info("Chicky client disconnected")
             chicky_client = None
         
+        # If the controller disconnected, release control
+        if current_controller == sid:
+            logger.info(f"Controller {sid} disconnected, releasing control")
+            current_controller = None
+            
+            if control_timeout:
+                control_timeout.cancel()
+                control_timeout = None
+            
+            # Notify all clients that control is released
+            await sio.emit("control-status", {
+                "inUse": False,
+                "userId": None,
+                "timeoutSeconds": CONTROL_TIMEOUT_SECONDS
+            })
+        
         visitor_count = max(0, visitor_count - 1)
-        await sio.emit("visitor_count", {"count": visitor_count})
+        await sio.emit("visitor-count", {"count": visitor_count})
     
     @sio.event
     async def authenticate(sid, data):
@@ -190,7 +222,190 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
             logger.info(f"Config request denied for client {sid} (not authorized)")
             return {"success": False, "message": "Not authorized"}
     
+    @sio.event
+    async def request_control(sid, data):
+        """
+        Handle control request from a client
+        
+        Args:
+            sid: Session ID
+            data: Request data
+            
+        Returns:
+            Control request result
+        """
+        global current_controller, control_timeout
+        logger.info(f"Client {sid} requesting control")
+        
+        # Check if control is available
+        if current_controller is None:
+            # Grant control
+            current_controller = sid
+            logger.info(f"Control granted to client {sid}")
+            
+            # Set timeout to automatically release control
+            if control_timeout:
+                control_timeout.cancel()
+            
+            # Create a new timeout task
+            control_timeout = asyncio.create_task(release_control_after_timeout(sio, sid))
+            
+            # Notify all clients
+            await sio.emit("control-status", {
+                "inUse": True,
+                "userId": sid,
+                "timeoutSeconds": CONTROL_TIMEOUT_SECONDS
+            })
+            
+            return {"success": True}
+        elif current_controller == sid:
+            # Already has control, reset timeout
+            logger.info(f"Client {sid} already has control, resetting timeout")
+            
+            if control_timeout:
+                control_timeout.cancel()
+            
+            # Create a new timeout task
+            control_timeout = asyncio.create_task(release_control_after_timeout(sio, sid))
+            
+            return {"success": True}
+        else:
+            # Denied - someone else has control
+            logger.info(f"Control request from {sid} denied, already in use by {current_controller}")
+            return {
+                "success": False,
+                "message": "Another user currently has control"
+            }
+    
+    @sio.event
+    async def release_control(sid, data):
+        """
+        Handle control release from a client
+        
+        Args:
+            sid: Session ID
+            data: Release data
+            
+        Returns:
+            Control release result
+        """
+        global current_controller, control_timeout
+        logger.info(f"Client {sid} releasing control")
+        
+        # Check if this client has control
+        if current_controller == sid:
+            current_controller = None
+            logger.info(f"Control released by client {sid}")
+            
+            # Cancel timeout
+            if control_timeout:
+                control_timeout.cancel()
+                control_timeout = None
+            
+            # Notify all clients
+            await sio.emit("control-status", {
+                "inUse": False,
+                "userId": None,
+                "timeoutSeconds": CONTROL_TIMEOUT_SECONDS
+            })
+            
+            return {"success": True}
+        else:
+            logger.info(f"Control release from {sid} ignored, not the controller")
+            return {
+                "success": False,
+                "message": "You don't have control"
+            }
+    
+    @sio.event
+    async def command_executed(sid, data):
+        """
+        Handle command execution notification from a client
+        
+        Args:
+            sid: Session ID
+            data: Command data
+            
+        Returns:
+            Command execution result
+        """
+        global current_controller, control_timeout
+        logger.info(f"Client {sid} executed a command")
+        
+        # Check if this client has control
+        if current_controller == sid:
+            logger.info(f"Resetting control timeout for client {sid}")
+            
+            # Reset timeout
+            if control_timeout:
+                control_timeout.cancel()
+            
+            # Create a new timeout task
+            control_timeout = asyncio.create_task(release_control_after_timeout(sio, sid))
+            
+            return {"success": True}
+        else:
+            logger.info(f"Command execution from {sid} ignored, not the controller")
+            return {
+                "success": False,
+                "message": "You don't have control"
+            }
+    
+    @sio.event
+    async def check_chicky_status(sid, data):
+        """
+        Check if the chicky client is connected
+        
+        Args:
+            sid: Session ID
+            data: Request data
+            
+        Returns:
+            Chicky connection status
+        """
+        global chicky_client
+        logger.info(f"Client {sid} checking chicky status")
+        
+        is_connected = chicky_client is not None and chicky_client.get("sid") is not None
+        
+        return {
+            "connected": is_connected,
+            "timestamp": asyncio.get_event_loop().time()
+        }
+    
     return app
+
+async def release_control_after_timeout(sio, sid):
+    """
+    Release control after timeout
+    
+    Args:
+        sio: Socket.IO server
+        sid: Session ID of the controller
+    """
+    global current_controller, control_timeout
+    
+    try:
+        # Wait for timeout
+        await asyncio.sleep(CONTROL_TIMEOUT_SECONDS)
+        
+        # Check if this client still has control
+        if current_controller == sid:
+            logger.info(f"Control timeout for client {sid}, releasing control")
+            current_controller = None
+            control_timeout = None
+            
+            # Notify all clients
+            await sio.emit("control-status", {
+                "inUse": False,
+                "userId": None,
+                "timeoutSeconds": CONTROL_TIMEOUT_SECONDS
+            })
+    except asyncio.CancelledError:
+        # Task was cancelled, do nothing
+        pass
+    except Exception as e:
+        logger.error(f"Error in release_control_after_timeout: {e}")
 
 def get_socketio_server() -> Optional[socketio.AsyncServer]:
     """
@@ -240,4 +455,14 @@ def get_chicky_client() -> Optional[Dict[str, Any]]:
         Chicky client or None if not connected
     """
     global chicky_client
-    return chicky_client 
+    return chicky_client
+
+def get_current_controller() -> Optional[str]:
+    """
+    Get the current controller
+    
+    Returns:
+        Current controller SID or None if no one has control
+    """
+    global current_controller
+    return current_controller 
