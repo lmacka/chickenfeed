@@ -50,6 +50,13 @@ def parse_config_value(key: str, value: Union[str, int, bool]) -> Union[str, int
 def is_within_allowed_hours(config: Dict[str, Any]) -> bool:
     """
     Check if current time is within allowed hours
+    
+    Args:
+        config: Configuration dictionary with allowed_start_hour, allowed_end_hour, 
+               and timezone_offset
+               
+    Returns:
+        True if current time is within allowed hours, False otherwise
     """
     # If the configuration is not yet available, default to false
     if (config.get("allowed_start_hour") is None or 
@@ -65,4 +72,9 @@ def is_within_allowed_hours(config: Dict[str, Any]) -> bool:
     local_hour = (now.hour + config["timezone_offset"]) % 24
     
     # Check if current hour is within allowed range
-    return local_hour >= config["allowed_start_hour"] and local_hour < config["allowed_end_hour"] 
+    # If start_hour < end_hour, normal range check
+    if config["allowed_start_hour"] < config["allowed_end_hour"]:
+        return local_hour >= config["allowed_start_hour"] and local_hour < config["allowed_end_hour"]
+    # If start_hour > end_hour, we're spanning midnight
+    else:
+        return local_hour >= config["allowed_start_hour"] or local_hour < config["allowed_end_hour"] 

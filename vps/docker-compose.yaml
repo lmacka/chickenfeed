@@ -81,9 +81,9 @@ services:
       - chicky_servo1_pin=15
       - chicky_servo2_pin=14
       - chicky_debug=false
-      - chicky_allowed_start_hour=5  # 5am AEST
-      - chicky_allowed_end_hour=19   # 7pm AEST
-      - chicky_timezone_offset=10    # AEST+10
+      - chicky_allowed_start_hour=${LIGHT_ON_HOUR}
+      - chicky_allowed_end_hour=${LIGHT_OFF_HOUR}
+      - chicky_timezone_offset=${TIMEZONE_OFFSET}
     volumes:
       - ./chicky-control:/usr/src/app:rw
       - ./config/keys:/keys:ro

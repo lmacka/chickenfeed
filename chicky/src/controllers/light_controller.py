@@ -55,6 +55,35 @@ async def handle_light_command(data: Dict[str, Any], config: Dict[str, Any], soc
             "error": str(e)
         }
 
+async def auto_turn_on_light(socket, is_connected: Callable[[], bool]) -> Dict[str, Any]:
+    """
+    Automatically turn on the light at the start of the allowed hours
+    """
+    try:
+        logger.info("Auto turn-on: turning light on")
+        
+        # Control the light
+        result = control_light("on")
+        
+        # Emit the result to the server if connected
+        if is_connected() and socket and hasattr(socket, "emit"):
+            try:
+                await socket.emit("light_result", {
+                    "success": result["success"],
+                    "state": "on",
+                    "auto": True
+                })
+            except Exception as e:
+                logger.error(f"Error emitting auto turn-on result: {e}")
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error in auto turn-on: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
 async def auto_shutoff_light(socket, is_connected: Callable[[], bool]) -> Dict[str, Any]:
     """
     Automatically shut off the light at the end of the allowed hours
