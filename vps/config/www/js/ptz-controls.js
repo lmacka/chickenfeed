@@ -507,8 +507,8 @@ function initializeControlButtons({ buttons, terminal, startCooldown, startContr
         sendPTZCommand('preset-3', false, terminal, socketId, notifyServer)
           .then(() => {
             // Wait 1 second before dispensing treat
-            updateTerminal(TERMINAL_MESSAGES.CAMERA_POSITIONED, terminal);
-            return new Promise(resolve => setTimeout(resolve, 1000));
+            updateTerminal(TERMINAL_MESSAGES.CAMERA_MOVING, terminal);
+            return new Promise(resolve => setTimeout(resolve, 3000));
           })
           .then(() => {
             // Then dispense treat

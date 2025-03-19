@@ -133,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initializePanelDrag(ptzPanel, panelHeader);
   
   // Initialize terminal with welcome message
-  updateTerminal(TERMINAL_MESSAGES.READY, terminal);
+  updateTerminal(TERMINAL_MESSAGES.INITIALIZING, terminal);
   
   // Setup WebSocket connection for viewer count
   const socket = setupViewerCountSocket(updateViewerCount);
