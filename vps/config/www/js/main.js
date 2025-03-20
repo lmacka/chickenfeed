@@ -20,6 +20,7 @@ import {
   enableAllControls
 } from './ptz-controls.js';
 import { initializeHLSPlayer } from './video-player.js';
+import { ChatWindow } from './chat.js';
 
 // Initialize the application when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -249,5 +250,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (player) {
       player.dispose();
     }
+  });
+
+  // Add inside the DOMContentLoaded event listener
+  document.getElementById('chat-button').addEventListener('click', () => {
+    new ChatWindow(socket);  // socket is your existing Socket.IO connection
   });
 }); 

@@ -46,8 +46,8 @@
         <button class="panel-control" id="info-button" title="View on GitHub">
           <span class="icon icon-info"></span>
         </button>
-        <button class="panel-control" id="drag-handle" title="Drag">
-          <span class="icon icon-drag"></span>
+        <button class="panel-control" id="chat-button" title="Chat">
+          <span class="icon icon-chat">💬</span>
         </button>
         <button class="panel-control" id="close-panel" title="Close">
           <span class="icon icon-close"></span>
@@ -124,6 +124,29 @@
       
       <div class="terminal" id="response-terminal">
         SYSTEM READY. STANDING BY.<span class="cursor">█</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="chat-panel" class="floating-panel" style="display: none;">
+    <div class="panel-header">
+      <h3 class="panel-title">CHOOK CHAT</h3>
+      <div class="panel-controls">
+        <button class="panel-control" id="drag-handle" title="Drag">
+          <span class="icon icon-drag"></span>
+        </button>
+        <button class="panel-control" id="close-chat" title="Close">
+          <span class="icon icon-close"></span>
+        </button>
+      </div>
+    </div>
+    <div class="chat-terminal">
+      <div id="chat-messages">
+        CHAT SYSTEM INITIALIZED. STANDING BY.<span class="cursor">█</span>
+      </div>
+      <div class="input-line">
+        <span class="prompt">&gt;</span>
+        <input type="text" id="chat-input" maxlength="200" spellcheck="false">
       </div>
     </div>
   </div>
