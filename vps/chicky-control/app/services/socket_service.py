@@ -5,9 +5,13 @@ import os
 import logging
 import asyncio
 from typing import Dict, Any, Optional, List
+from datetime import datetime
 
 import socketio
 from fastapi import FastAPI
+from better_profanity import profanity
+
+from app.utils.user_naming import get_user_identifier
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -25,6 +29,13 @@ socketio_server = None
 # Control system variables
 current_controller = None
 control_timeout = None
+
+# Add after the global state variables
+chat_history: List[Dict[str, str]] = []  # Store last 50 messages
+MAX_CHAT_HISTORY = 50
+
+# Initialize profanity filter
+profanity.load_censor_words()
 
 def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
     """
@@ -66,8 +77,12 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
             environ: WSGI environment
         """
         global visitor_count
-        logger.info(f"New client connected: {sid}")
+        user_id = get_user_identifier(environ)
+        logger.info(f"New client connected: {user_id} (sid: {sid})")
         visitor_count += 1
+        
+        # Store the user ID in the session data
+        await sio.save_session(sid, {'user_id': user_id})
         
         # Send visitor count to all clients
         await sio.emit("visitor-count", {"count": visitor_count})
@@ -372,6 +387,37 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
             "connected": is_connected,
             "timestamp": asyncio.get_event_loop().time()
         }
+    
+    @sio.event
+    async def chat_message(sid, data):
+        """Handle incoming chat messages"""
+        if not isinstance(data, dict) or 'message' not in data:
+            return
+        
+        # Get session data to access user_id
+        session = await sio.get_session(sid)
+        user_id = session.get('user_id', sid[:8])  # Fallback to truncated sid if no user_id
+        
+        # Clean the message
+        clean_message = profanity.censor(data['message'][:200])
+        
+        message = {
+            'userId': user_id,  # Use the country-breed identifier
+            'message': clean_message,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        chat_history.append(message)
+        if len(chat_history) > MAX_CHAT_HISTORY:
+            chat_history.pop(0)
+        
+        # Broadcast to all clients
+        await sio.emit('chat_message', message)
+
+    @sio.event
+    async def request_chat_history(sid):
+        """Send chat history to newly connected clients"""
+        await sio.emit('chat_history', {'messages': chat_history}, room=sid)
     
     return app
 
