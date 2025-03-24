@@ -36,12 +36,11 @@ async def handle_treat_command(data: Dict[str, Any], config: Dict[str, Any], soc
             }
         
         # Get servo configuration
-        servo = data.get("servo", "servo1")
-        servo_pin = config.get(f"{servo}_pin")
+        servo_pin = config.get("servo_pin")
         
         # Check if servo is configured
         if not servo_pin:
-            message = f"Treat command rejected: {servo} not configured"
+            message = "Treat command rejected: servo not configured"
             logger.warning(message)
             
             return {
@@ -50,7 +49,7 @@ async def handle_treat_command(data: Dict[str, Any], config: Dict[str, Any], soc
             }
         
         # Dispense the treat
-        result = await dispense_treat(servo, servo_pin)
+        result = await dispense_treat("servo", servo_pin)
         
         # Emit the result to the server
         if socket and hasattr(socket, "emit"):
