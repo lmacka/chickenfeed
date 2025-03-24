@@ -7,6 +7,7 @@ import asyncio
 from typing import Dict, Any, Union
 
 from src.utils.logger import get_logger
+from src.hardware.sensors import read_sensors
 
 logger = get_logger(__name__)
 
@@ -116,3 +117,19 @@ async def dispense_treat(servo: str, servo_pin: int) -> Dict[str, Any]:
         "success": True,
         "servo": servo
     }
+
+def get_sensor_readings() -> Dict[str, Any]:
+    """
+    Get readings from all environmental sensors
+    
+    Returns:
+        Dict containing sensor readings and success status
+    """
+    try:
+        return read_sensors()
+    except Exception as e:
+        logger.error(f"Error reading sensors: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }

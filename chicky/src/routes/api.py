@@ -9,7 +9,7 @@ from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 
 from src.utils.logger import get_logger
-from src.hardware.hardware_interface import control_light
+from src.hardware.hardware_interface import control_light, get_sensor_readings
 from src.utils.validation import is_within_allowed_hours
 from src.services.socket_service import get_socket, is_connected, check_dns
 

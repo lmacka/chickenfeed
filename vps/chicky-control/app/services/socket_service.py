@@ -419,6 +419,41 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
         """Send chat history to newly connected clients"""
         await sio.emit('chat_history', {'messages': chat_history}, room=sid)
     
+    @sio.event
+    async def get_sensors(sid, data):
+        """
+        Handle sensor readings request
+        
+        Args:
+            sid: Session ID
+            data: Request data
+            
+        Returns:
+            Sensor readings
+        """
+        logger.info(f"Client {sid} requesting sensor readings")
+        
+        try:
+            # Request sensor readings from chicky client
+            response = await sio.call(
+                "get_sensors",
+                {},
+                to=sid,
+                timeout=15
+            )
+            
+            # Handle response
+            logger.info(f"Received sensor readings: {response}")
+            
+            return response
+        except (asyncio.TimeoutError, socketio.exceptions.TimeoutError):
+            # Handle timeout
+            logger.error("Get sensors request timed out")
+            return {
+                "success": False,
+                "error": "Request timed out waiting for chicky controller response"
+            }
+    
     return app
 
 async def release_control_after_timeout(sio, sid):
