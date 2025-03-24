@@ -3,6 +3,7 @@
  */
 import { updateTerminal } from './terminal.js';
 import { TERMINAL_MESSAGES } from './constants.js';
+import { handleControlGranted, handleControlReleased } from './main.js';
 
 /**
  * Sets up a WebSocket connection for viewer count updates
@@ -97,7 +98,7 @@ function setupControlStatusListeners(socket, { terminal, takeControlButton, disa
           takeControlButton.classList.remove('active');
           disableAllControls();
           stopControlTimer();
-          updateTerminal(TERMINAL_MESSAGES.CONTROL_RELEASED, terminal);
+          handleControlReleased(terminal);
         } else {
           // Just inform the user that control is available
           updateTerminal(TERMINAL_MESSAGES.CONTROL_AVAILABLE, terminal);
@@ -124,7 +125,7 @@ function requestControl(socket, { terminal, takeControlButton, enableAllControls
       state.hasControl = true;
       takeControlButton.classList.add('active');
       enableAllControls();
-      updateTerminal(TERMINAL_MESSAGES.CONTROL_GRANTED.replace('{seconds}', controlTimeout), terminal);
+      handleControlGranted(terminal);
       
       // Start the control timer
       startControlTimer(controlTimeout);
@@ -156,7 +157,7 @@ function releaseControl(socket, { terminal, takeControlButton, disableAllControl
       // Stop the control timer
       stopControlTimer();
       
-      updateTerminal(TERMINAL_MESSAGES.CONTROL_RELEASED, terminal);
+      handleControlReleased(terminal);
     });
   }
 }

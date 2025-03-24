@@ -14,6 +14,7 @@ from src.utils.logger import get_logger
 from src.utils.validation import parse_config_value
 from src.controllers.light_controller import handle_light_command
 from src.controllers.treat_controller import handle_treat_command
+from src.hardware.hardware_interface import get_sensor_readings
 
 logger = get_logger(__name__)
 
@@ -196,6 +197,23 @@ async def connect_to_server(
         logger.info("Received light status update")
         logger.debug(f"Light status data: {data}")
         # Process light status update if needed
+    
+    # Add get_sensors handler
+    @sio.on("get_sensors")
+    async def on_get_sensors(data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Handle get_sensors request from server"""
+        try:
+            readings = get_sensor_readings()
+            return {
+                "success": True,
+                "readings": readings
+            }
+        except Exception as e:
+            logger.error(f"Failed to get sensor readings: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
     
     # Connect to the server
     try:

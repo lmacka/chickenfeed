@@ -58,6 +58,15 @@ class ControlStatusResponse(BaseModel):
     userId: Optional[str]
     timeoutSeconds: int
 
+class SensorReadingsResponse(BaseModel):
+    success: bool
+    temperature: Optional[float] = None
+    pressure: Optional[float] = None
+    humidity: Optional[float] = None
+    light: Optional[float] = None
+    units: Optional[Dict[str, str]] = None
+    error: Optional[str] = None
+
 @router.get("/health", response_model=HealthResponse)
 async def health_check() -> Dict[str, Any]:
     """
@@ -305,4 +314,57 @@ async def give_treat(request: Request) -> Dict[str, Any]:
                 "success": False,
                 "message": "Request timed out waiting for chicky controller response"
             }
-        ) 
+        )
+
+@router.get("/sensors", response_model=SensorReadingsResponse)
+async def get_sensors() -> Dict[str, Any]:
+    """
+    Get sensor readings from the chicky controller
+    
+    Returns:
+        Current sensor readings
+    """
+    # Get Socket.IO server and chicky client
+    chicky_client = get_chicky_client()
+    
+    # Check if chicky client is connected
+    if not chicky_client:
+        logger.error("Get sensors failed: Chicky client not connected")
+        return {
+            "success": False,
+            "error": "Chicky controller not connected"
+        }
+    
+    # Get the Socket.IO server instance
+    sio = get_socketio_server()
+    if not sio:
+        logger.error("Get sensors failed: Socket.IO server not available")
+        return {
+            "success": False,
+            "error": "Socket.IO server not available"
+        }
+    
+    try:
+        # Request sensor readings from chicky client
+        response = await sio.call(
+            "get_sensors",
+            {},
+            to=chicky_client["sid"],
+            timeout=15
+        )
+        
+        # Handle response
+        logger.debug(f"Received sensor readings: {response}")
+        
+        # Return the readings data instead of the whole response
+        return response.get("readings", {
+            "success": False,
+            "error": "No readings data in response"
+        })
+    except (asyncio.TimeoutError, socketio.exceptions.TimeoutError):
+        # Handle timeout
+        logger.error("Get sensors request timed out")
+        return {
+            "success": False,
+            "error": "Request timed out waiting for chicky controller response"
+        } 

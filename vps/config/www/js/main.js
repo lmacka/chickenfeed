@@ -2,7 +2,7 @@
  * Main application entry point
  */
 import { TERMINAL_MESSAGES, DEFAULT_CONTROL_TIMEOUT } from './constants.js';
-import { updateTerminal } from './terminal.js';
+import { updateTerminal, updateTerminalWithStats } from './terminal.js';
 import { 
   setupViewerCountSocket, 
   setupControlStatusListeners,
@@ -21,6 +21,52 @@ import {
 } from './ptz-controls.js';
 import { initializeHLSPlayer } from './video-player.js';
 import { ChatWindow } from './chat.js';
+
+// Function to format sensor readings
+function formatSensorReadings(readings) {
+  if (!readings.success) {
+    return `SENSOR ERROR: ${readings.error}`;
+  }
+  
+  const { temperature, pressure, humidity, light, units } = readings;
+  return `${temperature.toFixed(2)}${units.temperature} ${pressure.toFixed(2)}${units.pressure} ${humidity.toFixed(2)}${units.humidity} ${light.toFixed(6)}${units.light}`;
+}
+
+// Function to fetch sensor readings
+async function fetchSensorReadings() {
+  try {
+    const response = await fetch('/api/sensors');
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching sensor readings:', error);
+    return {
+      success: false,
+      error: 'Failed to fetch sensor readings'
+    };
+  }
+}
+
+// Function to handle control granted
+function handleControlGranted(terminal) {
+  updateTerminal(TERMINAL_MESSAGES.CONTROL_GRANTED, terminal);
+  // Fetch and display sensor readings
+  fetchSensorReadings().then(readings => {
+    updateTerminalWithStats(readings, terminal);
+  });
+}
+
+// Function to handle control released
+function handleControlReleased(terminal) {
+  updateTerminal(TERMINAL_MESSAGES.CONTROL_RELEASED, terminal);
+  // Fetch and display sensor readings
+  fetchSensorReadings().then(readings => {
+    updateTerminalWithStats(readings, terminal);
+  });
+}
+
+// Export handler functions
+export { handleControlGranted, handleControlReleased };
 
 // Initialize the application when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -93,6 +139,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Chicky is connected, enable control button if not already in use
         if (!wasConnected) {
           updateTerminal(TERMINAL_MESSAGES.CONTROL_PI_ONLINE, terminal);
+          // Fetch and display sensor readings
+          fetchSensorReadings().then(readings => {
+            updateTerminalWithStats(readings, terminal);
+          });
           if (!state.hasControl && !document.querySelector('.control-btn.active')) {
             takeControlButton.disabled = false;
           }
@@ -256,4 +306,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('chat-button').addEventListener('click', () => {
     new ChatWindow(socket);  // socket is your existing Socket.IO connection
   });
+
+  // Add periodic stats update
+  setInterval(() => {
+    if (state.chickyConnected) {
+      fetchSensorReadings().then(readings => {
+        updateTerminalWithStats(readings, terminal);
+      });
+    }
+  }, 5000); // Update every 5 seconds
 }); 
