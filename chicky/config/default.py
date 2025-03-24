@@ -13,8 +13,7 @@ config: Dict[str, Any] = {
     "auth_token": os.getenv("AUTH_TOKEN"),
     
     # Hardware configuration - these will be provided by the server
-    "servo1_pin": None,
-    "servo2_pin": None,
+    "servo_pin": None,
     
     # Operation settings - these will be provided by the server
     "allowed_start_hour": None,

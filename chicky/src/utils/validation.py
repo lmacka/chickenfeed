@@ -37,8 +37,7 @@ def parse_config_value(key: str, value: Union[str, int, bool]) -> Union[str, int
         return False
     
     # Number conversion for known numeric fields
-    if key in ["servo1_pin", "servo2_pin", "allowed_start_hour", 
-               "allowed_end_hour", "timezone_offset"]:
+    if key in ["servo_pin", "allowed_start_hour", "allowed_end_hour", "timezone_offset"]:
         try:
             return int(value)
         except (ValueError, TypeError):
