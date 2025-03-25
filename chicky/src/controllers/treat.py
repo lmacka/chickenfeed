@@ -1,11 +1,12 @@
 """
 Treat controller for handling treat-related commands
 """
+import os
 import asyncio
+import subprocess
 from typing import Dict, Any
 from src.utils.logger import get_logger
 from src.utils.validation import is_within_allowed_hours
-from src.hardware.servo import ServoController
 
 logger = get_logger(__name__)
 
@@ -39,7 +40,6 @@ async def handle_treat_command(data: Dict[str, Any], config: Dict[str, Any], soc
     Returns:
         Dict containing command result
     """
-    servo = None
     try:
         # Check if command is within allowed hours
         if not is_within_allowed_hours(config):
@@ -55,14 +55,44 @@ async def handle_treat_command(data: Dict[str, Any], config: Dict[str, Any], soc
                 "error": "Sorry, the treat dispenser is not properly configured."
             }
         
+        # Path to the servo script
+        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
+                                   "hardware", "servo.py")
+        
         try:
-            # Initialize servo
-            servo = ServoController(servo_pin)
+            # Dispense sequence - first open
+            logger.info(f"Dispensing treat: opening servo on pin {servo_pin} to 180 degrees")
+            open_process = subprocess.run(
+                [script_path, str(servo_pin), "180"],
+                capture_output=True,
+                text=True,
+                check=False
+            )
             
-            # Dispense sequence
-            servo.set_angle(180)  # Open dispenser
+            if open_process.returncode != 0:
+                logger.error(f"Failed to open treat dispenser: {open_process.stderr}")
+                return {
+                    "success": False,
+                    "error": f"Failed to dispense treat: {open_process.stderr}"
+                }
+            
+            # Wait briefly
             await asyncio.sleep(1.0)
-            servo.set_angle(0)    # Close dispenser
+            
+            # Close the dispenser
+            logger.info(f"Dispensing treat: closing servo on pin {servo_pin} to 0 degrees")
+            close_process = subprocess.run(
+                [script_path, str(servo_pin), "0"],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            
+            if close_process.returncode != 0:
+                logger.warning(f"Failed to close treat dispenser: {close_process.stderr}")
+                # Continue anyway as the treat was already dispensed
+            
+            # Wait briefly
             await asyncio.sleep(0.5)
             
             result = {
@@ -91,7 +121,4 @@ async def handle_treat_command(data: Dict[str, Any], config: Dict[str, Any], soc
         return {
             "success": False,
             "error": str(e)
-        }
-    finally:
-        if servo:
-            servo.cleanup() 
+        } 

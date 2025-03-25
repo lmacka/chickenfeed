@@ -1,10 +1,11 @@
 """
 Light controller for handling light-related commands
 """
+import os
+import subprocess
 from typing import Dict, Any
 from src.utils.logger import get_logger
 from src.utils.validation import is_within_allowed_hours
-from src.hardware.light import LightController
 from src.utils.time_utils import parse_time_string
 
 logger = get_logger(__name__)
@@ -65,22 +66,38 @@ async def handle_light_command(data: Dict[str, Any], config: Dict[str, Any], soc
                 "error": "Invalid state. Use 'on' or 'off'."
             }
         
-        # Control the light
-        with LightController() as light:
-            light.set_state(state == "on")
+        # Control the light using subprocess to call light.py directly
+        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
+                                  "hardware", "light.py")
+        
+        logger.info(f"Running light script: {script_path} {state}")
+        process = subprocess.run([script_path, state], 
+                               capture_output=True, 
+                               text=True,
+                               check=False)
+        
+        if process.returncode == 0:
+            logger.info(f"Light command success: {state}")
             result = {
                 "success": True,
                 "state": state
             }
-            
-            # Notify server
-            if socket and hasattr(socket, "emit"):
-                try:
-                    await socket.emit("light_result", result)
-                except Exception as e:
-                    logger.error(f"Error emitting light result: {e}")
-            
-            return result
+        else:
+            logger.error(f"Light command failed: {process.stderr}")
+            result = {
+                "success": False,
+                "state": state,
+                "error": f"Light control failed: {process.stderr}"
+            }
+        
+        # Notify server
+        if socket and hasattr(socket, "emit"):
+            try:
+                await socket.emit("light_result", result)
+            except Exception as e:
+                logger.error(f"Error emitting light result: {e}")
+        
+        return result
             
     except Exception as e:
         logger.error(f"Error handling light command: {e}")
