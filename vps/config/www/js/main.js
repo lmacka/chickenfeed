@@ -21,6 +21,7 @@ import {
 } from './ptz-controls.js';
 import { initializeHLSPlayer } from './video-player.js';
 import { ChatWindow } from './chat.js';
+import { PanelManager } from './panel-manager.js';
 
 // Function to format sensor readings
 function formatSensorReadings(readings) {
@@ -70,6 +71,30 @@ export { handleControlGranted, handleControlReleased };
 
 // Initialize the application when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize panel manager
+  const panelManager = new PanelManager();
+  
+  // Register panels with interact.js configuration
+  panelManager.registerPanel('ptz-control-panel', {
+    isDraggable: true,
+    isExpandable: true,
+    minWidth: 280,
+    maxWidth: 400,
+    minHeight: 300,
+    maxHeight: '80vh',
+    initialPosition: { x: 20, y: window.innerHeight - 320 } // Bottom left
+  });
+  
+  panelManager.registerPanel('chat-panel', {
+    isDraggable: true,
+    isExpandable: true,
+    minWidth: 280,
+    maxWidth: 400,
+    minHeight: 300,
+    maxHeight: '80vh',
+    initialPosition: { x: window.innerWidth - 420, y: window.innerHeight - 320 } // Bottom right
+  });
+
   // Application state
   const state = {
     hasControl: false,
@@ -179,9 +204,6 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Initialize button cooldowns
   const { startCooldown } = initializeButtonCooldowns(presetButtons, cooldownOverlays);
-  
-  // Initialize the panel drag functionality
-  initializePanelDrag(ptzPanel, panelHeader);
   
   // Initialize terminal with welcome message
   updateTerminal(TERMINAL_MESSAGES.INITIALIZING, terminal);

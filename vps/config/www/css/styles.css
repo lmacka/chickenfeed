@@ -41,6 +41,7 @@ body {
   user-select: none;
   font-family: 'Courier New', monospace;
   font-size: 13px;
+  touch-action: none;
 }
 
 /* Chat Panel Styles */
@@ -51,13 +52,12 @@ body {
   border: 2px solid #5e4c3e;
   border-radius: 8px;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
+  position: absolute;
   z-index: 100;
   display: flex;
   flex-direction: column;
-  overflow: hidden;  /* Prevent content from spilling out */
+  overflow: hidden;
+  touch-action: none;
 }
 
 .chat-terminal {
@@ -150,33 +150,56 @@ body {
 
 /* Media query for mobile devices */
 @media (max-width: 768px) {
-  #ptz-control-panel {
-    position: relative;
-    bottom: auto;
-    left: auto;
-    width: 100%;
-    max-width: 280px;
-    margin: 16px auto 0;
+  .panel-handle {
+    display: block;
   }
-  
+
+  #ptz-control-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    transform: translateY(calc(100% - 40px));
+    transition: transform 0.3s ease;
+    z-index: 1000;
+  }
+
+  #ptz-control-panel.collapsed {
+    transform: translateY(calc(100% - 40px));
+  }
+
+  #ptz-control-panel:not(.collapsed) {
+    transform: translateY(0);
+  }
+
   .video-container {
     width: 100%;
-    margin: 0 auto;
+    margin: 0;
   }
-  
+
   body {
     flex-direction: column;
     overflow-y: auto;
     height: auto;
-    padding-bottom: 20px;
+    padding-bottom: 40px;
   }
 }
 
-/* For very small screens */
-@media (max-width: 360px) {
+/* Desktop styles */
+@media (min-width: 769px) {
   #ptz-control-panel {
-    width: 95%;
-    padding: 8px;
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    transform: translate(0, 0);
+    transition: transform 0.3s ease;
+  }
+
+  #ptz-control-panel.dragging {
+    transition: none;
   }
 }
 
@@ -186,8 +209,14 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  cursor: move;
+  cursor: grab;
   border-bottom: 2px solid #3d322a;
+  touch-action: none;
+  user-select: none;
+}
+
+.panel-header:active {
+  cursor: grabbing;
 }
 
 .panel-title {
@@ -698,4 +727,80 @@ input:checked + .toggle-slider:before {
 .icon-chat {
   font-size: 1.2em;
   line-height: 1;
+}
+
+/* Panel handle for mobile */
+.panel-handle {
+  width: 100%;
+  height: 20px;
+  background: #5e4c3e;
+  cursor: grab;
+  display: none; /* Hidden by default, shown on mobile */
+  border-radius: 8px 8px 0 0;
+  position: relative;
+  touch-action: none;
+}
+
+.panel-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+/* Mobile styles */
+@media (max-width: 768px) {
+  .panel-handle {
+    display: block;
+  }
+
+  #ptz-control-panel,
+  #chat-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    transform: translateY(calc(100% - 40px));
+    transition: transform 0.3s ease;
+    z-index: 1000;
+  }
+
+  #ptz-control-panel.collapsed,
+  #chat-panel.collapsed {
+    transform: translateY(calc(100% - 40px));
+  }
+
+  #ptz-control-panel:not(.collapsed),
+  #chat-panel:not(.collapsed) {
+    transform: translateY(0);
+  }
+
+  .video-container {
+    width: 100%;
+    margin: 0;
+  }
+
+  body {
+    flex-direction: column;
+    overflow-y: auto;
+    height: auto;
+    padding-bottom: 40px; /* Space for collapsed panels */
+  }
+
+  .panel-header {
+    cursor: grab;
+  }
+
+  .panel-control {
+    cursor: pointer;
+  }
+}
 }
