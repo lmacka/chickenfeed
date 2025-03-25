@@ -1,25 +1,24 @@
 """
 Scheduler service for managing automated tasks
 """
+import os
+import subprocess
+import time
 import asyncio
 import threading
-import time
-from typing import Dict, Any, Callable, Optional
-from datetime import datetime, timezone
-
 import schedule
+import logging
+from typing import Dict, Any, Callable, Optional
+from datetime import datetime, timezone, time as dt_time
 
 from src.utils.logger import get_logger
-from src.utils.validation import is_within_allowed_hours
-from src.hardware.light import LightController
 from src.utils.time_utils import parse_time_string
 
 logger = get_logger(__name__)
 
-# Global scheduler variables
-scheduler_thread = None
+# Global variables to control scheduler
 stop_scheduler = False
-is_scheduler_running = False
+scheduler_thread: Optional[threading.Thread] = None
 
 def parse_time_config(config: Dict[str, Any]) -> Dict[str, str]:
     """
@@ -223,23 +222,42 @@ async def auto_turn_on_light(socket, is_connected: Callable[[], bool]) -> Dict[s
     try:
         logger.info("Auto turn-on: turning light on")
         
-        # Control the light
-        with LightController() as light:
-            light.set_state(True)
+        # Path to the light script
+        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
+                                  "hardware", "light.py")
+        
+        # Run the light script to turn on the light
+        process = subprocess.run(
+            [script_path, "on"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        
+        if process.returncode == 0:
+            logger.info("Auto light-on success")
             result = {
                 "success": True,
                 "state": "on",
                 "auto": True
             }
-            
-            # Emit the result to the server if connected
-            if is_connected() and socket and hasattr(socket, "emit"):
-                try:
-                    await socket.emit("light_result", result)
-                except Exception as e:
-                    logger.error(f"Error emitting auto turn-on result: {e}")
-            
-            return result
+        else:
+            logger.error(f"Auto light-on failed: {process.stderr}")
+            result = {
+                "success": False,
+                "state": "on",
+                "auto": True,
+                "error": f"Failed to turn on light: {process.stderr}"
+            }
+        
+        # Emit the result to the server if connected
+        if is_connected() and socket and hasattr(socket, "emit"):
+            try:
+                await socket.emit("light_result", result)
+            except Exception as e:
+                logger.error(f"Error emitting auto turn-on result: {e}")
+        
+        return result
     except Exception as e:
         logger.error(f"Error in auto turn-on: {e}")
         return {
@@ -254,23 +272,42 @@ async def auto_shutoff_light(socket, is_connected: Callable[[], bool]) -> Dict[s
     try:
         logger.info("Auto shutoff: turning light off")
         
-        # Control the light
-        with LightController() as light:
-            light.set_state(False)
+        # Path to the light script
+        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
+                                  "hardware", "light.py")
+        
+        # Run the light script to turn off the light
+        process = subprocess.run(
+            [script_path, "off"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        
+        if process.returncode == 0:
+            logger.info("Auto light-off success")
             result = {
                 "success": True,
                 "state": "off",
                 "auto": True
             }
-            
-            # Emit the result to the server if connected
-            if is_connected() and socket and hasattr(socket, "emit"):
-                try:
-                    await socket.emit("light_result", result)
-                except Exception as e:
-                    logger.error(f"Error emitting auto shutoff result: {e}")
-            
-            return result
+        else:
+            logger.error(f"Auto light-off failed: {process.stderr}")
+            result = {
+                "success": False,
+                "state": "off",
+                "auto": True,
+                "error": f"Failed to turn off light: {process.stderr}"
+            }
+        
+        # Emit the result to the server if connected
+        if is_connected() and socket and hasattr(socket, "emit"):
+            try:
+                await socket.emit("light_result", result)
+            except Exception as e:
+                logger.error(f"Error emitting auto shutoff result: {e}")
+        
+        return result
     except Exception as e:
         logger.error(f"Error in auto shutoff: {e}")
         return {

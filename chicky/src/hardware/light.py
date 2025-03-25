@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
-"""
-Light controller for chicken coop lighting
-"""
 import time
 import automationhat
 import logging
 import sys
-from typing import Optional
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -14,21 +10,21 @@ logger = logging.getLogger(__name__)
 class LightController:
     """Light controller using automationhat relay"""
     
-    _instance: Optional['LightController'] = None
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-    
     def __enter__(self):
         """Context manager entry"""
-        return self
+        try:
+            # Initialize automationhat - this is crucial!
+            automationhat.setup()
+            time.sleep(0.1)  # Allow time for initialization
+            return self
+        except Exception as e:
+            logger.error(f"Failed to initialize automationhat: {e}")
+            raise
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit - ensure relay is off"""
-        # Just turn off the relay, let automationhat handle its own cleanup
-        automationhat.relay.one.off()
+        """Context manager exit - don't turn off relay automatically"""
+        # No need to do anything here - we want the relay to stay in its set state
+        pass
     
     def set_state(self, state: bool) -> None:
         """
@@ -37,24 +33,21 @@ class LightController:
         Args:
             state: True for on, False for off
         """
-        if state:
-            automationhat.relay.one.on()
-            logger.info("Light ON")
-        else:
-            automationhat.relay.one.off()
-            logger.info("Light OFF")
-
-# For direct script usage
-def set_state(state: bool) -> None:
-    """Set light state (for direct script usage)"""
-    if state:
-        automationhat.relay.one.on()
-        logger.info("Light ON")
-    else:
-        automationhat.relay.one.off()
-        logger.info("Light OFF")
+        try:
+            if state:
+                automationhat.relay.one.on()
+                logger.info("Light ON")
+            else:
+                automationhat.relay.one.off()
+                logger.info("Light OFF")
+        except Exception as e:
+            logger.error(f"Error setting light state: {e}")
+            raise
 
 if __name__ == "__main__":
+    # Configure logging for CLI usage
+    logging.basicConfig(level=logging.INFO)
+    
     if len(sys.argv) != 2:
         print("Usage: python3 light.py <on|off>")
         sys.exit(1)
@@ -67,6 +60,9 @@ if __name__ == "__main__":
         
         with LightController() as light:
             light.set_state(state == "on")
+            print(f"Light set to {state}")
+            # Keep running briefly to ensure command completes
+            time.sleep(0.5)
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1) 

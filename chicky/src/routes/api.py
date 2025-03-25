@@ -11,7 +11,6 @@ from pydantic import BaseModel
 from src.utils.logger import get_logger
 from src.utils.validation import is_within_allowed_hours
 from src.services.socket_service import get_socket, is_connected, check_dns
-from src.hardware.light import LightController
 from src.hardware.sensors import SensorController
 
 router = APIRouter()
@@ -164,11 +163,33 @@ async def get_sensors() -> Dict[str, Any]:
 async def control_light(state: str) -> Dict[str, Any]:
     """Control the light"""
     try:
-        with LightController() as light:
-            light.set_state(state == "on")
+        import os
+        import subprocess
+        
+        # Path to the light script
+        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
+                                  "hardware", "light.py")
+        
+        logger.info(f"API call to control light: {state}")
+        process = subprocess.run(
+            [script_path, state], 
+            capture_output=True, 
+            text=True,
+            check=False
+        )
+        
+        if process.returncode == 0:
+            logger.info(f"Light set to {state} successfully")
             return {
                 "success": True,
                 "state": state
+            }
+        else:
+            logger.error(f"Error controlling light: {process.stderr}")
+            return {
+                "success": False,
+                "state": state,
+                "error": f"Light command failed: {process.stderr}"
             }
     except Exception as e:
         logger.error(f"Error controlling light: {e}")
