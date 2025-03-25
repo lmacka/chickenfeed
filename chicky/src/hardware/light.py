@@ -26,8 +26,9 @@ class LightController:
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit"""
-        pass
+        """Context manager exit - ensure relay is off"""
+        # Just turn off the relay, let automationhat handle its own cleanup
+        automationhat.relay.one.off()
     
     def set_state(self, state: bool) -> None:
         """

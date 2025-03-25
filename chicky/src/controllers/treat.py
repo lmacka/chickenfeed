@@ -39,6 +39,7 @@ async def handle_treat_command(data: Dict[str, Any], config: Dict[str, Any], soc
     Returns:
         Dict containing command result
     """
+    servo = None
     try:
         # Check if command is within allowed hours
         if not is_within_allowed_hours(config):
@@ -54,12 +55,15 @@ async def handle_treat_command(data: Dict[str, Any], config: Dict[str, Any], soc
                 "error": "Sorry, the treat dispenser is not properly configured."
             }
         
-        # Use context manager for servo control
-        with ServoController(servo_pin) as servo:
+        try:
+            # Initialize servo
+            servo = ServoController(servo_pin)
+            
             # Dispense sequence
-            servo.set_angle(180)
+            servo.set_angle(180)  # Open dispenser
+            await asyncio.sleep(1.0)
+            servo.set_angle(0)    # Close dispenser
             await asyncio.sleep(0.5)
-            servo.set_angle(1)
             
             result = {
                 "success": True,
@@ -75,9 +79,19 @@ async def handle_treat_command(data: Dict[str, Any], config: Dict[str, Any], soc
             
             return result
             
+        except Exception as e:
+            logger.error(f"Error controlling servo: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to dispense treat: {str(e)}"
+            }
+            
     except Exception as e:
         logger.error(f"Error handling treat command: {e}")
         return {
             "success": False,
             "error": str(e)
-        } 
+        }
+    finally:
+        if servo:
+            servo.cleanup() 
