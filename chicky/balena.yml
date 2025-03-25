@@ -13,7 +13,7 @@ assets:
 data:
   applicationEnvironmentVariables:
     - PORT: 3000
-    - DEBUG: false
+    - LOG_LEVEL: DEBUG
   defaultDeviceType: raspberry-pi5
   supportedDeviceTypes:
     - raspberry-pi5

@@ -1,5 +1,5 @@
 """
-Scheduler service for handling scheduled tasks using the schedule library
+Scheduler service for managing automated tasks
 """
 import asyncio
 import threading
@@ -10,8 +10,9 @@ from datetime import datetime, timezone
 import schedule
 
 from src.utils.logger import get_logger
-from src.controllers.light_controller import auto_shutoff_light, auto_turn_on_light
-from src.hardware.hardware_interface import control_light
+from src.utils.validation import is_within_allowed_hours
+from src.hardware.light import LightController
+from src.utils.time_utils import parse_time_string
 
 logger = get_logger(__name__)
 
@@ -35,15 +36,23 @@ def parse_time_config(config: Dict[str, Any]) -> Dict[str, str]:
         "off_time": None
     }
     
-    # Parse start hour (on time)
-    if config.get("allowed_start_hour") is not None:
-        start_hour = int(config["allowed_start_hour"])
-        result["on_time"] = f"{start_hour:02d}:00"
+    # Parse start time
+    if config.get("allowed_start_time") is not None:
+        try:
+            hours, minutes = parse_time_string(config["allowed_start_time"])
+            if hours is not None and minutes is not None:
+                result["on_time"] = f"{hours:02d}:{minutes:02d}"
+        except Exception as e:
+            logger.error(f"Error parsing start time: {e}")
     
-    # Parse end hour (off time)
-    if config.get("allowed_end_hour") is not None:
-        end_hour = int(config["allowed_end_hour"])
-        result["off_time"] = f"{end_hour:02d}:00"
+    # Parse end time
+    if config.get("allowed_end_time") is not None:
+        try:
+            hours, minutes = parse_time_string(config["allowed_end_time"])
+            if hours is not None and minutes is not None:
+                result["off_time"] = f"{hours:02d}:{minutes:02d}"
+        except Exception as e:
+            logger.error(f"Error parsing end time: {e}")
     
     return result
 
@@ -56,11 +65,28 @@ def schedule_runner():
     logger.info("Scheduler thread started")
     is_scheduler_running = True
     
-    while not stop_scheduler:
-        # Run all pending jobs
-        schedule.run_pending()
-        time.sleep(1)
+    # Create an event loop for this thread
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     
+    while not stop_scheduler:
+        try:
+            # Run all pending jobs
+            for job in schedule.get_jobs():
+                if job.should_run:
+                    # Run the job and get its coroutine
+                    coro = job.job_func()
+                    # Run the coroutine in the event loop
+                    if asyncio.iscoroutine(coro):
+                        loop.run_until_complete(coro)
+                    job.last_run = schedule.datetime.datetime.now()
+                    job._schedule_next_run()
+            time.sleep(1)
+        except Exception as e:
+            logger.error(f"Error in scheduler loop: {e}")
+    
+    # Clean up the event loop
+    loop.close()
     logger.info("Scheduler thread stopped")
     is_scheduler_running = False
 
@@ -80,10 +106,10 @@ def setup_light_schedule(
     Returns:
         True if schedule was set up successfully, False otherwise
     """
-    if not config.get("allowed_start_hour") or not config.get("allowed_end_hour"):
+    if not config.get("allowed_start_time") or not config.get("allowed_end_time"):
         logger.warning(
             "Light schedule setup skipped: configuration not yet available. "
-            "Required: allowed_start_hour and allowed_end_hour"
+            "Required: allowed_start_time and allowed_end_time"
         )
         return False
     
@@ -101,15 +127,22 @@ def setup_light_schedule(
     
     logger.info(f"Setting up light schedule: ON at {on_time}, OFF at {off_time}")
     
+    # Create wrapper functions that capture the current socket
+    async def turn_on_job():
+        from src.services.socket_service import get_socket, is_connected
+        socket = get_socket()
+        return await auto_turn_on_light(socket, is_connected)
+    
+    async def turn_off_job():
+        from src.services.socket_service import get_socket, is_connected
+        socket = get_socket()
+        return await auto_shutoff_light(socket, is_connected)
+    
     # Schedule light turn-on job
-    schedule.every().day.at(on_time).do(
-        lambda: asyncio.create_task(auto_turn_on_light(socket, is_connected))
-    )
+    schedule.every().day.at(on_time).do(turn_on_job)
     
     # Schedule light turn-off job
-    schedule.every().day.at(off_time).do(
-        lambda: asyncio.create_task(auto_shutoff_light(socket, is_connected))
-    )
+    schedule.every().day.at(off_time).do(turn_off_job)
     
     # Start the scheduler thread if not already running
     start_scheduler_thread()
@@ -181,4 +214,66 @@ def shutdown_scheduler() -> None:
     # Clear all scheduled jobs
     schedule.clear()
     
-    logger.info("Scheduler shut down successfully") 
+    logger.info("Scheduler shut down successfully")
+
+async def auto_turn_on_light(socket, is_connected: Callable[[], bool]) -> Dict[str, Any]:
+    """
+    Automatically turn on the light at the start of the allowed hours
+    """
+    try:
+        logger.info("Auto turn-on: turning light on")
+        
+        # Control the light
+        with LightController() as light:
+            light.set_state(True)
+            result = {
+                "success": True,
+                "state": "on",
+                "auto": True
+            }
+            
+            # Emit the result to the server if connected
+            if is_connected() and socket and hasattr(socket, "emit"):
+                try:
+                    await socket.emit("light_result", result)
+                except Exception as e:
+                    logger.error(f"Error emitting auto turn-on result: {e}")
+            
+            return result
+    except Exception as e:
+        logger.error(f"Error in auto turn-on: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+async def auto_shutoff_light(socket, is_connected: Callable[[], bool]) -> Dict[str, Any]:
+    """
+    Automatically shut off the light at the end of the allowed hours
+    """
+    try:
+        logger.info("Auto shutoff: turning light off")
+        
+        # Control the light
+        with LightController() as light:
+            light.set_state(False)
+            result = {
+                "success": True,
+                "state": "off",
+                "auto": True
+            }
+            
+            # Emit the result to the server if connected
+            if is_connected() and socket and hasattr(socket, "emit"):
+                try:
+                    await socket.emit("light_result", result)
+                except Exception as e:
+                    logger.error(f"Error emitting auto shutoff result: {e}")
+            
+            return result
+    except Exception as e:
+        logger.error(f"Error in auto shutoff: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        } 

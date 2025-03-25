@@ -16,8 +16,8 @@ config: Dict[str, Any] = {
     "servo_pin": None,
     
     # Operation settings - these will be provided by the server
-    "allowed_start_hour": None,
-    "allowed_end_hour": None,
+    "allowed_start_time": None,
+    "allowed_end_time": None,
     "timezone_offset": None,
     
     # Internal settings

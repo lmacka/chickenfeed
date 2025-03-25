@@ -12,9 +12,9 @@ import socketio
 
 from src.utils.logger import get_logger
 from src.utils.validation import parse_config_value
-from src.controllers.light_controller import handle_light_command
-from src.controllers.treat_controller import handle_treat_command
-from src.hardware.hardware_interface import get_sensor_readings
+from src.controllers.light import handle_light_command
+from src.controllers.treat import handle_treat_command
+from src.hardware.sensors import SensorController
 
 logger = get_logger(__name__)
 
@@ -30,6 +30,27 @@ def hash_config(obj: Dict[str, Any]) -> str:
     Simple hash function for configuration objects
     """
     return hashlib.md5(json.dumps(obj, sort_keys=True).encode()).hexdigest()
+
+async def get_sensor_readings() -> Dict[str, Any]:
+    """
+    Get readings from all environmental sensors
+    
+    Returns:
+        Dict containing sensor readings and success status
+    """
+    try:
+        with SensorController() as sensors:
+            return sensors.read_sensors()
+    except Exception as e:
+        logger.error(f"Error reading sensors: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "temperature": None,
+            "pressure": None,
+            "humidity": None,
+            "light": None
+        }
 
 async def connect_to_server(
     config: Dict[str, Any], 
@@ -137,6 +158,10 @@ async def connect_to_server(
             for key, value in data.items():
                 parsed_config[key] = parse_config_value(key, value)
             
+            # Add debug logging
+            logger.debug(f"Received config values: {parsed_config}")
+            logger.debug(f"Parsed allowed times - Start: {parsed_config.get('allowed_start_time')}, End: {parsed_config.get('allowed_end_time')}")
+            
             # Check if configuration has changed
             new_hash = hash_config(parsed_config)
             if new_hash != last_config_hash:
@@ -203,16 +228,20 @@ async def connect_to_server(
     async def on_get_sensors(data: Dict[str, Any] = None) -> Dict[str, Any]:
         """Handle get_sensors request from server"""
         try:
-            readings = get_sensor_readings()
-            return {
-                "success": True,
-                "readings": readings
-            }
+            readings = await get_sensor_readings()
+            return {"readings": readings}
         except Exception as e:
             logger.error(f"Failed to get sensor readings: {e}")
             return {
-                "success": False,
-                "error": str(e)
+                "readings": {
+                    "success": False,
+                    "error": str(e),
+                    "temperature": None,
+                    "pressure": None,
+                    "humidity": None,
+                    "light": None,
+                    "units": None
+                }
             }
     
     # Connect to the server

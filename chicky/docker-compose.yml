@@ -16,4 +16,3 @@ services:
       - PORT=3000
       - REMOTE_SERVER=${REMOTE_SERVER}
       - AUTH_TOKEN=${CHICKY_AUTH_TOKEN}
-      - DEBUG=false 
