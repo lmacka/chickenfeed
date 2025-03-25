@@ -3,75 +3,27 @@
  */
 import { updateTerminal } from './terminal.js';
 import { TERMINAL_MESSAGES, COOLDOWN_TIME } from './constants.js';
+import { initializeDraggablePanel } from './drag-handler.js';
 
 /**
  * Initializes the PTZ control panel dragging functionality
  * @param {HTMLElement} ptzPanel - The PTZ control panel element
  * @param {HTMLElement} panelHeader - The panel header element
  */
-function initializePanelDrag(ptzPanel, panelHeader) {
-  let isDragging = false;
-  let offsetX, offsetY;
-  const initialHeight = ptzPanel.offsetHeight;
-  
-  // Make the panel draggable by the header
-  panelHeader.addEventListener('mousedown', (e) => {
-    if (e.target.closest('#info-button, #close-panel')) return;
-    
-    isDragging = true;
-    offsetX = e.clientX - ptzPanel.getBoundingClientRect().left;
-    offsetY = e.clientY - ptzPanel.getBoundingClientRect().top;
-    e.preventDefault();
-  });
+function initializePanelDrag() {
+  const panel = document.getElementById('ptz-controls');
+  if (!panel) return;
 
-  document.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    
-    const x = e.clientX - offsetX;
-    const y = e.clientY - offsetY;
-    
-    // Keep the panel within the viewport
-    const maxX = window.innerWidth - ptzPanel.offsetWidth;
-    const maxY = window.innerHeight - ptzPanel.offsetHeight;
-    
-    ptzPanel.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
-    ptzPanel.style.top = Math.max(0, Math.min(y, maxY)) + 'px';
-    ptzPanel.style.bottom = 'auto'; // Remove bottom positioning when dragged
-    ptzPanel.style.height = initialHeight + 'px'; // Maintain initial height
-  });
-
-  document.addEventListener('mouseup', () => {
-    if (isDragging) {
-      isDragging = false;
+  initializeDraggablePanel(panel, {
+    handle: '.panel-header',
+    excludeSelector: '#info-button, #close-panel',
+    maintainHeight: true,
+    onDragStart: (event) => {
+      // Add any PTZ-specific drag start handling here
+    },
+    onDragEnd: (event) => {
+      // Add any PTZ-specific drag end handling here
     }
-  });
-
-  // Touch support for mobile devices
-  panelHeader.addEventListener('touchstart', (e) => {
-    isDragging = true;
-    offsetX = e.touches[0].clientX - ptzPanel.getBoundingClientRect().left;
-    offsetY = e.touches[0].clientY - ptzPanel.getBoundingClientRect().top;
-    e.preventDefault();
-  });
-
-  document.addEventListener('touchmove', (e) => {
-    if (!isDragging) return;
-    
-    const x = e.touches[0].clientX - offsetX;
-    const y = e.touches[0].clientY - offsetY;
-    
-    const maxX = window.innerWidth - ptzPanel.offsetWidth;
-    const maxY = window.innerHeight - ptzPanel.offsetHeight;
-    
-    ptzPanel.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
-    ptzPanel.style.top = Math.max(0, Math.min(y, maxY)) + 'px';
-    ptzPanel.style.bottom = 'auto'; // Remove bottom positioning when dragged
-    ptzPanel.style.height = initialHeight + 'px'; // Maintain initial height
-    e.preventDefault();
-  });
-
-  document.addEventListener('touchend', () => {
-    isDragging = false;
   });
 }
 
