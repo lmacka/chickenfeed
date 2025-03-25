@@ -1,5 +1,5 @@
 """
-API routes for the local server
+API routes for the Chicky app
 """
 from typing import Dict, Any, Optional
 import time
@@ -9,9 +9,10 @@ from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 
 from src.utils.logger import get_logger
-from src.hardware.hardware_interface import control_light, get_sensor_readings
 from src.utils.validation import is_within_allowed_hours
 from src.services.socket_service import get_socket, is_connected, check_dns
+from src.hardware.light import LightController
+from src.hardware.sensors import SensorController
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -142,32 +143,38 @@ async def url_test(request: Request) -> Dict[str, Any]:
             "error": str(e)
         }
 
+@router.get("/sensors")
+async def get_sensors() -> Dict[str, Any]:
+    """Get current sensor readings"""
+    try:
+        with SensorController() as sensors:
+            return sensors.read_sensors()
+    except Exception as e:
+        logger.error(f"Error reading sensors: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "temperature": None,
+            "pressure": None,
+            "humidity": None,
+            "light": None
+        }
+
 @router.post("/light")
-async def light_control(request: Request, light_request: LightRequest) -> Dict[str, Any]:
-    """Manual light control (for local testing)"""
-    state = light_request.state
-    config = request.app.state.config
-    
-    # Check if the command is within allowed hours
-    if not is_within_allowed_hours(config):
-        allowed_start = config["allowed_start_hour"]
-        allowed_end = config["allowed_end_hour"]
-        
-        end_display = f"{allowed_end - 12}pm" if allowed_end > 12 else f"{allowed_end}am"
-        
-        raise HTTPException(
-            status_code=403,
-            detail=f"Sorry, the chicken coop light can only be operated between {allowed_start}am and {end_display}."
-        )
-    
-    # Control the light
-    result = control_light(state)
-    
-    # Return the result
-    if not result["success"]:
-        raise HTTPException(
-            status_code=500,
-            detail=result["error"]
-        )
-    
-    return result
+async def control_light(state: str) -> Dict[str, Any]:
+    """Control the light"""
+    try:
+        with LightController() as light:
+            light.set_state(state == "on")
+            return {
+                "success": True,
+                "state": state
+            }
+    except Exception as e:
+        logger.error(f"Error controlling light: {e}")
+        # Don't convert to HTTPException - return consistent error format
+        return {
+            "success": False,
+            "state": state,
+            "error": str(e)
+        }

@@ -80,8 +80,8 @@ services:
       # Chicky configuration (for raspberry pi)
       - chicky_servo_pin=${SERVO_PIN}
       - chicky_debug=false
-      - chicky_allowed_start_hour=${LIGHT_ON_HOUR}
-      - chicky_allowed_end_hour=${LIGHT_OFF_HOUR}
+      - chicky_allowed_start_time=${LIGHT_ON_TIME}
+      - chicky_allowed_end_time=${LIGHT_OFF_TIME}
       - chicky_timezone_offset=${TIMEZONE_OFFSET}
     volumes:
       - ./chicky-control:/usr/src/app:rw
