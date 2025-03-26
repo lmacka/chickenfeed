@@ -1,4 +1,5 @@
 import { initializeDraggablePanel } from './drag-handler.js';
+import { PanelManager } from './panel-manager.js';
 
 export class ChatWindow {
     constructor(socket) {
@@ -10,11 +11,7 @@ export class ChatWindow {
 
     setupChatWindow() {
         // Show the panel
-        this.chatPanel.style.display = 'block';
-        
-        // Position it initially
-        this.chatPanel.style.bottom = '20px';
-        this.chatPanel.style.right = '20px';
+        this.chatPanel.style.display = 'flex';
         
         // Set custom username if it exists in cookies
         if (this.customUsername) {

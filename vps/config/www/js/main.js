@@ -12,7 +12,6 @@ import {
   checkChickyStatus
 } from './socket-handler.js';
 import {
-  initializePanelDrag,
   initializeControlTimer,
   initializeButtonCooldowns,
   initializeControlButtons,
@@ -77,21 +76,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // Register panels with interact.js configuration
   panelManager.registerPanel('ptz-control-panel', {
     isDraggable: true,
-    isExpandable: true,
     minWidth: 280,
-    maxWidth: 400,
-    minHeight: 300,
-    maxHeight: '80vh',
-    initialPosition: { x: 20, y: window.innerHeight - 320 } // Bottom left
+    maxWidth: 280,
+    minHeight: 350,
+    initialPosition: { x: 20, y: window.innerHeight - 370 }
   });
   
   panelManager.registerPanel('chat-panel', {
     isDraggable: true,
-    isExpandable: true,
-    minWidth: 280,
+    minWidth: 400,
     maxWidth: 400,
     minHeight: 300,
-    maxHeight: '80vh',
     initialPosition: { x: window.innerWidth - 420, y: window.innerHeight - 320 } // Bottom right
   });
 
@@ -338,3 +333,76 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }, 5000); // Update every 5 seconds
 }); 
+
+function initializePanel(id) {
+  const { element, config } = this.panels.get(id);
+  
+  // Set panel styles
+  element.style.position = 'fixed';
+  element.style.width = `${config.minWidth}px`;
+  
+  // Set initial position based on device
+  const isMobile = window.innerWidth <= 768;
+  let initialX = config.initialPosition.x;
+  let initialY = config.initialPosition.y;
+  
+  // Adjust for mobile
+  if (isMobile) {
+    initialX = Math.min(initialX, window.innerWidth - element.offsetWidth - 10);
+    initialY = Math.min(initialY, window.innerHeight - 100);
+  }
+  
+  // Position directly using left/top instead of transform
+  element.style.left = `${initialX}px`;
+  element.style.top = `${initialY}px`;
+  element.style.transform = 'translate(0, 0)'; // Reset any transform
+  
+  element.style.touchAction = 'none'; // Prevent scrolling when dragging on touch devices
+  element.style.userSelect = 'none'; // Prevent text selection during drag
+  
+  if (!config.isDraggable) return;
+
+  // Initialize interact.js
+  interact(element).draggable({
+    handle: '.panel-header',
+    ignoreFrom: '.panel-control', // Don't drag when clicking buttons
+    modifiers: [
+      // Keep within window bounds
+      interact.modifiers.restrictRect({
+        restriction: 'parent',
+        endOnly: true
+      })
+    ],
+    inertia: {
+      resistance: 10,
+      minSpeed: 100,
+      endSpeed: 10
+    },
+    listeners: {
+      start(event) {
+        event.target.classList.add('dragging');
+      },
+      move(event) {
+        const target = event.target;
+        
+        // Get current left/top position
+        const rect = target.getBoundingClientRect();
+        const left = rect.left + event.dx;
+        const top = rect.top + event.dy;
+        
+        // Keep within bounds
+        const maxX = window.innerWidth - target.offsetWidth;
+        const maxY = window.innerHeight - target.offsetHeight;
+        const boundedLeft = Math.min(Math.max(0, left), maxX);
+        const boundedTop = Math.min(Math.max(0, top), maxY);
+        
+        // Update element position
+        target.style.left = `${boundedLeft}px`;
+        target.style.top = `${boundedTop}px`;
+      },
+      end(event) {
+        event.target.classList.remove('dragging');
+      }
+    }
+  });
+} 

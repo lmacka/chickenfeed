@@ -52,12 +52,20 @@ body {
   border: 2px solid #5e4c3e;
   border-radius: 8px;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
-  position: absolute;
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
   z-index: 100;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   touch-action: none;
+  user-select: none;
+}
+
+.dragging {
+  opacity: 0.9;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.6) !important;
 }
 
 .chat-terminal {
@@ -170,7 +178,7 @@ body {
 
 /* Username settings modal */
 .username-modal {
-  position: absolute;
+  position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
@@ -179,8 +187,10 @@ body {
   border-radius: 8px;
   padding: 16px;
   z-index: 1000;
-  width: 300px;
+  width: 90%;
+  max-width: 300px;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.6);
+  touch-action: none;
 }
 
 .username-modal h3 {
@@ -189,33 +199,40 @@ body {
   font-family: 'Courier New', monospace;
   border-bottom: 1px solid #444;
   padding-bottom: 8px;
+  font-size: 16px;
 }
 
 .username-modal input {
   width: 100%;
   background: #333;
   border: 1px solid #555;
-  padding: 8px;
+  padding: 12px;
   color: #33ff33;
   font-family: 'Courier New', monospace;
   margin-bottom: 12px;
   border-radius: 4px;
+  font-size: 16px;
+  box-sizing: border-box;
 }
 
 .username-modal-buttons {
   display: flex;
   justify-content: space-between;
+  gap: 8px;
 }
 
 .username-modal button {
   background: #5e4c3e;
   border: none;
   color: #f5f5dc;
-  padding: 6px 12px;
+  padding: 12px 20px;
   cursor: pointer;
   font-family: 'Courier New', monospace;
   border-radius: 4px;
   transition: background 0.2s;
+  font-size: 16px;
+  flex: 1;
+  min-width: 0;
 }
 
 .username-modal button:hover {
@@ -230,7 +247,26 @@ body {
   background: #8b5555;
 }
 
-/* Media query for mobile devices */
+/* Mobile styles for username modal */
+@media (max-width: 768px) {
+  .username-modal {
+    width: 85%;
+    max-width: 280px;
+    padding: 16px;
+  }
+
+  .username-modal input {
+    padding: 12px;
+    font-size: 16px;
+  }
+
+  .username-modal button {
+    padding: 12px;
+    font-size: 14px;
+  }
+}
+
+/* Mobile styles */
 @media (max-width: 768px) {
   .panel-handle {
     display: block;
@@ -239,22 +275,47 @@ body {
   #ptz-control-panel {
     position: fixed;
     bottom: 0;
-    left: 0;
-    right: 0;
-    width: 100%;
-    max-width: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(calc(100% - 40px));
+    width: 90%;
+    max-width: 280px;
     margin: 0;
-    transform: translateY(calc(100% - 40px));
     transition: transform 0.3s ease;
     z-index: 1000;
+    touch-action: none;
   }
 
-  #ptz-control-panel.collapsed {
-    transform: translateY(calc(100% - 40px));
+  #chat-panel {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%) translateY(calc(100% - 40px));
+    width: 90%;
+    max-width: 400px;
+    margin: 0;
+    transition: transform 0.3s ease;
+    z-index: 1000;
+    touch-action: none;
+    display: flex;
+    flex-direction: column;
+    height: 40vh;
+    max-height: 40vh;
   }
 
-  #ptz-control-panel:not(.collapsed) {
-    transform: translateY(0);
+  #ptz-control-panel.collapsed,
+  #chat-panel.collapsed {
+    transform: translateX(-50%) translateY(calc(100% - 40px));
+  }
+
+  #ptz-control-panel:not(.collapsed),
+  #chat-panel:not(.collapsed) {
+    transform: translateX(-50%) translateY(0);
+  }
+
+  #ptz-control-panel.dragging,
+  #chat-panel.dragging {
+    transition: none;
+    transform: translateX(-50%) translateY(0);
   }
 
   .video-container {
@@ -266,7 +327,25 @@ body {
     flex-direction: column;
     overflow-y: auto;
     height: auto;
-    padding-bottom: 40px;
+    padding-bottom: 40px; /* Space for collapsed panels */
+  }
+
+  .panel-header {
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .panel-control {
+    cursor: pointer;
+  }
+
+  .chat-terminal {
+    height: calc(100% - 40px);
+    max-height: calc(40vh - 40px);
+  }
+
+  #chat-messages {
+    max-height: calc(40vh - 92px); /* Account for header and input line */
   }
 }
 
@@ -278,6 +357,8 @@ body {
     left: 20px;
     transform: translate(0, 0);
     transition: transform 0.3s ease;
+    width: 280px;
+    max-width: none;
   }
 
   #ptz-control-panel.dragging {
@@ -833,55 +914,4 @@ input:checked + .toggle-slider:before {
   height: 4px;
   background: rgba(255, 255, 255, 0.3);
   border-radius: 2px;
-}
-
-/* Mobile styles */
-@media (max-width: 768px) {
-  .panel-handle {
-    display: block;
-  }
-
-  #ptz-control-panel,
-  #chat-panel {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    width: 100%;
-    max-width: 100%;
-    margin: 0;
-    transform: translateY(calc(100% - 40px));
-    transition: transform 0.3s ease;
-    z-index: 1000;
-  }
-
-  #ptz-control-panel.collapsed,
-  #chat-panel.collapsed {
-    transform: translateY(calc(100% - 40px));
-  }
-
-  #ptz-control-panel:not(.collapsed),
-  #chat-panel:not(.collapsed) {
-    transform: translateY(0);
-  }
-
-  .video-container {
-    width: 100%;
-    margin: 0;
-  }
-
-  body {
-    flex-direction: column;
-    overflow-y: auto;
-    height: auto;
-    padding-bottom: 40px; /* Space for collapsed panels */
-  }
-
-  .panel-header {
-    cursor: grab;
-  }
-
-  .panel-control {
-    cursor: pointer;
-  }
 }

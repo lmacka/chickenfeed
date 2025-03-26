@@ -3,29 +3,6 @@
  */
 import { updateTerminal } from './terminal.js';
 import { TERMINAL_MESSAGES, COOLDOWN_TIME } from './constants.js';
-import { initializeDraggablePanel } from './drag-handler.js';
-
-/**
- * Initializes the PTZ control panel dragging functionality
- * @param {HTMLElement} ptzPanel - The PTZ control panel element
- * @param {HTMLElement} panelHeader - The panel header element
- */
-function initializePanelDrag() {
-  const panel = document.getElementById('ptz-controls');
-  if (!panel) return;
-
-  initializeDraggablePanel(panel, {
-    handle: '.panel-header',
-    excludeSelector: '#info-button, #close-panel',
-    maintainHeight: true,
-    onDragStart: (event) => {
-      // Add any PTZ-specific drag start handling here
-    },
-    onDragEnd: (event) => {
-      // Add any PTZ-specific drag end handling here
-    }
-  });
-}
 
 /**
  * Initializes the control timer functionality
@@ -518,7 +495,6 @@ function enableAllControls(presetButtons) {
 }
 
 export {
-  initializePanelDrag,
   initializeControlTimer,
   initializeButtonCooldowns,
   initializeControlButtons,
