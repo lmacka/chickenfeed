@@ -4,8 +4,11 @@ Socket.IO service for handling WebSocket communication with clients
 import os
 import logging
 import asyncio
+import json
+from pathlib import Path
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+import pytz
 
 import socketio
 from fastapi import FastAPI
@@ -20,6 +23,25 @@ logger = logging.getLogger(__name__)
 CONTROL_TIMEOUT_SECONDS = int(os.environ.get('CONTROL_TIMEOUT_SECONDS', 30))
 logger.info(f"Control timeout set to {CONTROL_TIMEOUT_SECONDS} seconds")
 
+# Set up file paths for persistence
+DATA_DIR = Path("/config/data")
+CHAT_HISTORY_FILE = DATA_DIR / "chat_history.json"
+CHAT_LOG_FILE = DATA_DIR / "chat_log.txt"
+
+# Ensure data directory exists
+DATA_DIR.mkdir(exist_ok=True, parents=True)
+
+# Configure chat logging
+chat_logger = logging.getLogger("chat_logger")
+chat_logger.setLevel(logging.INFO)
+# Prevent the chat log from propagating to the root logger
+chat_logger.propagate = False
+
+# Add a file handler for the chat log with clean timestamp format
+chat_file_handler = logging.FileHandler(CHAT_LOG_FILE)
+chat_file_handler.setFormatter(logging.Formatter('%(asctime)s | %(message)s', '%Y-%m-%d %H:%M:%S'))
+chat_logger.addHandler(chat_file_handler)
+
 # Global state
 light_state = False
 visitor_count = 0
@@ -31,11 +53,73 @@ current_controller = None
 control_timeout = None
 
 # Add after the global state variables
-chat_history: List[Dict[str, str]] = []  # Store last 50 messages
+chat_history: List[Dict[str, Any]] = []  # Store last 50 messages
 MAX_CHAT_HISTORY = 50
+
+# Define Australian timezone (GMT+10)
+AUSTRALIA_TZ = pytz.timezone('Australia/Brisbane')
 
 # Initialize profanity filter
 profanity.load_censor_words()
+
+def load_chat_history() -> List[Dict[str, Any]]:
+    """
+    Load chat history from persistence file
+    
+    Returns:
+        List of chat message dictionaries
+    """
+    if not CHAT_HISTORY_FILE.exists():
+        return []
+    
+    try:
+        with open(CHAT_HISTORY_FILE, 'r') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        logger.error(f"Error loading chat history: {e}")
+        return []
+
+def save_chat_history(history: List[Dict[str, Any]]) -> None:
+    """
+    Save chat history to persistence file
+    
+    Args:
+        history: List of chat message dictionaries
+    """
+    try:
+        with open(CHAT_HISTORY_FILE, 'w') as f:
+            json.dump(history, f, indent=2)
+    except IOError as e:
+        logger.error(f"Error saving chat history: {e}")
+
+def log_chat_message(message: Dict[str, Any], source_ip: str = None, country: str = None) -> None:
+    """
+    Log a chat message to the dedicated chat log file
+    
+    Args:
+        message: Chat message dictionary
+        source_ip: Source IP address (if available)
+        country: Resolved country code (if available)
+    """
+    try:
+        timestamp = datetime.fromisoformat(message['timestamp'])
+        local_time = timestamp.astimezone(AUSTRALIA_TZ)
+        
+        # Prepare location info if available
+        location_info = ""
+        if source_ip or country:
+            location_info = " ["
+            if source_ip:
+                location_info += f"IP:{source_ip}"
+            if country:
+                location_info += f"{', ' if source_ip else ''}Country:{country}"
+            location_info += "]"
+        
+        # Format without timestamp since the logger will add one: USERNAME [LOCATION]: MESSAGE
+        log_entry = f"{message['userId']}{location_info}: {message['message']}"
+        chat_logger.info(log_entry)
+    except Exception as e:
+        logger.error(f"Error logging chat message: {e}")
 
 def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
     """
@@ -47,7 +131,11 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
     Returns:
         Configured Socket.IO ASGI application
     """
-    global socketio_server
+    global socketio_server, chat_history
+    
+    # Load chat history from file
+    chat_history = load_chat_history()
+    logger.info(f"Loaded {len(chat_history)} chat messages from persistence")
     
     # Create Socket.IO server
     sio = socketio.AsyncServer(
@@ -77,12 +165,20 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
             environ: WSGI environment
         """
         global visitor_count
-        user_id = get_user_identifier(environ)
-        logger.info(f"New client connected: {user_id} (sid: {sid})")
+        
+        # Get user identifier, country code, and IP address
+        user_id, country_code, ip_address = get_user_identifier(environ)
+        
+        logger.info(f"New client connected: {user_id} (sid: {sid}, ip: {ip_address}, country: {country_code})")
         visitor_count += 1
         
-        # Store the user ID in the session data
-        await sio.save_session(sid, {'user_id': user_id})
+        # Store the user ID, country code, and IP in the session data
+        await sio.save_session(sid, {
+            'user_id': user_id, 
+            'custom_username': None,
+            'country_code': country_code,
+            'ip_address': ip_address
+        })
         
         # Send visitor count to all clients
         await sio.emit("visitor-count", {"count": visitor_count})
@@ -391,29 +487,91 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
     @sio.event
     async def chat_message(sid, data):
         """Handle incoming chat messages"""
+        global chat_history
+        
         if not isinstance(data, dict) or 'message' not in data:
             return
         
-        # Get session data to access user_id
+        # Get session data to access user information
         session = await sio.get_session(sid)
-        user_id = session.get('user_id', sid[:8])  # Fallback to truncated sid if no user_id
+        user_id = session.get('custom_username') or session.get('user_id', sid[:8])
+        
+        # Get source IP and country from session data
+        source_ip = session.get('ip_address')
+        country = session.get('country_code')
         
         # Clean the message
         clean_message = profanity.censor(data['message'][:200])
         
+        # Get current time in Australian timezone
+        now = datetime.now(tz=AUSTRALIA_TZ)
+        
         message = {
-            'userId': user_id,  # Use the country-breed identifier
+            'userId': user_id,
             'message': clean_message,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': now.isoformat(),
+            'is_custom_username': session.get('custom_username') is not None
         }
         
+        # Add message to history
         chat_history.append(message)
         if len(chat_history) > MAX_CHAT_HISTORY:
             chat_history.pop(0)
         
+        # Save chat history to file
+        save_chat_history(chat_history)
+        
+        # Log message to dedicated chat log with source IP and country
+        log_chat_message(message, source_ip, country)
+        
         # Broadcast to all clients
         await sio.emit('chat_message', message)
-
+    
+    @sio.event
+    async def set_username(sid, data):
+        """Set a custom username for a client"""
+        if not isinstance(data, dict) or 'username' not in data:
+            return {'success': False, 'error': 'Invalid request'}
+        
+        username = data['username'].strip()
+        
+        # Get current session data
+        session = await sio.get_session(sid)
+        
+        # Check if username is empty - this means reset to default
+        if not username:
+            session['custom_username'] = None
+            await sio.save_session(sid, session)
+            return {'success': True, 'message': 'Username reset to default'}
+        
+        # Validate and clean username
+        if len(username) > 20:
+            username = username[:20]
+        
+        username = profanity.censor(username)
+        
+        # Store in session
+        session['custom_username'] = username
+        await sio.save_session(sid, session)
+        
+        # Log username change
+        source_ip = session.get('ip_address')
+        country = session.get('country_code')
+        original_id = session.get('user_id')
+        
+        logger.info(f"User {original_id} set custom username to {username} (sid: {sid}, ip: {source_ip}, country: {country})")
+        
+        return {'success': True, 'username': username}
+        
+    @sio.event
+    async def get_username(sid):
+        """Get the current username for a client"""
+        session = await sio.get_session(sid)
+        return {
+            'username': session.get('custom_username') or session.get('user_id', sid[:8]),
+            'is_custom': session.get('custom_username') is not None
+        }
+    
     @sio.event
     async def request_chat_history(sid):
         """Send chat history to newly connected clients"""

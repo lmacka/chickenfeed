@@ -139,13 +139,95 @@ body {
   word-wrap: break-word;
 }
 
-.timestamp {
-  color: #666;
-}
-
 .user {
   color: #ff9933;
   font-weight: bold;
+  position: relative;
+  cursor: help;
+}
+
+.user:hover::after {
+  content: attr(data-timestamp);
+  position: absolute;
+  left: 0;
+  top: -24px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 10;
+}
+
+.custom-username {
+  color: #66ccff;
+}
+
+.no-country {
+  color: #99cc99;  /* Light green for usernames without country codes */
+}
+
+/* Username settings modal */
+.username-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #2b2b2b;
+  border: 2px solid #5e4c3e;
+  border-radius: 8px;
+  padding: 16px;
+  z-index: 1000;
+  width: 300px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.6);
+}
+
+.username-modal h3 {
+  margin-top: 0;
+  color: #f5f5dc;
+  font-family: 'Courier New', monospace;
+  border-bottom: 1px solid #444;
+  padding-bottom: 8px;
+}
+
+.username-modal input {
+  width: 100%;
+  background: #333;
+  border: 1px solid #555;
+  padding: 8px;
+  color: #33ff33;
+  font-family: 'Courier New', monospace;
+  margin-bottom: 12px;
+  border-radius: 4px;
+}
+
+.username-modal-buttons {
+  display: flex;
+  justify-content: space-between;
+}
+
+.username-modal button {
+  background: #5e4c3e;
+  border: none;
+  color: #f5f5dc;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.username-modal button:hover {
+  background: #8b7355;
+}
+
+.username-modal .reset-btn {
+  background: #5e3e3e;
+}
+
+.username-modal .reset-btn:hover {
+  background: #8b5555;
 }
 
 /* Media query for mobile devices */
@@ -802,5 +884,4 @@ input:checked + .toggle-slider:before {
   .panel-control {
     cursor: pointer;
   }
-}
 }
