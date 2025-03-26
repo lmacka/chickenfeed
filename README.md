@@ -1,30 +1,51 @@
-#  <img src="docs/chickenfeed.webp" alt="Chicken Feed" width="40"/> Chicken Feed
+# <img src="docs/chickenfeed.webp" alt="Chicken Feed" width="40"/> Chicken Feed
 
-## A Smart Chicken Coop Monitoring System
-Interactive chicken video stream; who woulda thunk it?
+## 🐔 Interactive Chicken Coop Livestream
+
+[![Screenshot](docs/screenshot.png)](https://chook.cam)
+
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-chook.cam-ff9966?style=for-the-badge&logo=internetexplorer&logoColor=white)](https://chook.cam)
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-a8d1ff?style=for-the-badge&logo=github&logoColor=black)](https://github.com/lmacka/chickenfeed)
 [![Related](https://img.shields.io/badge/Related-Coopi_Controller-b3e6b3?style=for-the-badge&logo=github&logoColor=black)](https://github.com/lmacka/coopi)
 
-![Docker](https://img.shields.io/badge/Docker-Powered-d8c1ff?style=flat-square&logo=docker&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-Powered-009688?style=flat-square&logo=fastapi&logoColor=white)
+![SocketIO](https://img.shields.io/badge/Socket.IO-Real--time-010101?style=flat-square&logo=socket.io&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?style=flat-square&logo=docker&logoColor=white)
 ![Tailscale](https://img.shields.io/badge/Tailscale-Secured-ffb3d1?style=flat-square&logo=tailscale&logoColor=white)
-![Node.js](https://img.shields.io/badge/Node.js-Powered-b3e6b3?style=flat-square&logo=node.js&logoColor=white)
 ![HLS](https://img.shields.io/badge/HLS-Streaming-ffd9b3?style=flat-square&logo=videojs&logoColor=white)
 ![IoT](https://img.shields.io/badge/IoT-Hardware-c1f0d9?style=flat-square&logo=raspberrypi&logoColor=white)
 
-## 📋 What's This?
+## 🐥 What is Chicken Feed?
 
-This is my little project that lets me keep an eye on my chickens from anywhere. It streams video from my backyard to the web and even lets visitors interact with the setup remotely. Pretty neat, right?
+**Watch and interact with my backyard chickens from anywhere in the world!**
 
-Under the hood, it's got some cool tech that I've put together to solve a bunch of interesting problems:
+Chicken Feed is an interactive livestream that lets you not only watch my chicken coop in real-time but also:
 
-- Streaming video from a home network without killing my bandwidth
-- Connecting home hardware to the internet (safely!)
-- Controlling physical stuff remotely
-- Making it all work together seamlessly
+- 📹 Control the camera to look at different areas of the coop
+- 🪱 Dispense treats to the chickens with the push of a button
+- 💡 Turn the coop lights on and off
+- 🌡️ View real-time environmental data like temperature and humidity
+- 💬 Chat with other chicken enthusiasts
 
-## 🏗️ How It Works
+All from the comfort of your web browser, with no downloads required!
+
+## 🎮 How to Use It
+
+1. Visit [chook.cam](https://chook.cam) on any modern browser
+2. Watch the live chicken stream
+3. Click the power button to request control (if available)
+4. Once you have control, use the buttons to:
+   - Move the camera to different preset positions
+   - Dispense treats to the chickens
+   - Toggle the coop lights on/off
+5. Chat with other viewers in the chat panel
+
+Each visitor gets 30 seconds of control before it's passed to the next person in line. Commands have cooldown periods to prevent overuse and keep the chickens happy!
+
+> 🕒 **Note:** Treat dispensing is only available during daylight hours to respect the chickens' sleep schedule.
+
+## 🏗️ System Overview
 
 ```mermaid
 ---
@@ -37,7 +58,7 @@ flowchart TD
     direction LR
         Viewers["Web Browser"]
   end
- subgraph VPS["VPS (docker containers)"]
+ subgraph VPS["VPS (Docker Containers)"]
     direction LR
         VPSTailscale["Tailscale Client"]
         MediaMTX["MediaMTX (RTSP→HLS)"]
@@ -47,12 +68,13 @@ flowchart TD
  subgraph Hardware["Hardware Controls"]
     direction LR
         Servos["Servo Motors"]
-        Lights["Lights"]
+        Lights["Relay-controlled Lights"]
+        Sensors["Environmental Sensors"]
   end
  subgraph HomeNet["Home Network"]
     direction LR
         Router["Router with Tailscale"]
-        Camera["IP Camera (RTSP)"]
+        Camera["TP-Link Tapo C220 Camera"]
         RaspPi["Raspberry Pi (Chicky)"]
         Hardware
   end
@@ -72,6 +94,7 @@ flowchart TD
      ChickyControl:::controlNode
      Servos:::hardwareNode
      Lights:::hardwareNode
+     Sensors:::hardwareNode
      Router:::routerNode
      Camera:::cameraNode
      RaspPi:::raspberryNode
@@ -84,9 +107,6 @@ flowchart TD
     classDef swagNode fill:#ffb3d1,stroke:#ff80ab,stroke-width:2px,color:#333
     classDef controlNode fill:#b3e6f2,stroke:#66ccdf,stroke-width:2px,color:#333
     classDef viewerNode fill:#d9d9d9,stroke:#a6a6a6,stroke-width:2px,color:#333
-    style VPSTailscale fill:#d8c1ff
-    style ChickyControl fill:#b3d1ff
-    style Router fill:#a8d1ff
     linkStyle 0 stroke:#2962FF,fill:none
     linkStyle 1 stroke:#FF6D00,fill:none
     linkStyle 2 stroke:#FF6D00,fill:none
@@ -98,33 +118,46 @@ flowchart TD
     linkStyle 8 stroke:#2962FF,fill:none
     linkStyle 10 stroke:#2962FF,fill:none
     linkStyle 11 stroke:#2962FF,fill:none
-
 ```
 
-## 🧩 The Pieces
+## 🧩 System Components
 
-### At Home
-- A **Raspberry Pi** running Node.js to control everything
-- An **IP Camera** (TP-Link Tapo C220) that can pan and tilt
-- Some **servo motors** hooked up to a feed dispenser
-- **Tailscale** running on the router for secure networking
+### 💻 Cloud Server (VPS)
 
-### In The Cloud
-- A VPS running **Docker** containers for all the services
-- **MediaMTX** to handle the video streaming magic
-- **SWAG** (Nginx with SSL) to serve up the web interface
-- A **Node.js server** that handles all the control commands
-- **Tailscale** to create a secure tunnel back to my home network
+- **Web Interface**: Retro-styled control panel with live chat
+- **Control Server**: FastAPI + Socket.IO backend for real-time control
+- **Video Streaming**: MediaMTX for converting RTSP to web-friendly HLS
+- **Web Server**: SWAG (Nginx with SSL) for secure web hosting
+- **Network Security**: Tailscale VPN client for secure tunneling
 
-## 💡 Cool Technical Bits
+### 🏠 Home Setup
 
-- The whole setup uses just **one connection** from my home network, no matter how many people are watching
-- **HLS streaming** means it works in any modern browser without plugins
-- **Tailscale** creates an encrypted network between my home and the cloud server
-- Everything runs in **Docker containers** for easy deployment and updates
-- The **camera controls** work in real-time with minimal lag
+- **Brain**: Raspberry Pi running custom Python controllers
+- **Eyes**: TP-Link Tapo C220 PTZ IP camera
+- **Treats**: Servo-controlled treat dispenser
+- **Lighting**: Relay-controlled coop lights
+- **Sensing**: Temperature, humidity, pressure, and light sensors
+- **Networking**: Tailscale VPN for secure connectivity
 
-## 🔒 Keeping Things Secure
+## 🔧 Technical Deep Dive
+
+### 🚀 Solving the Streaming Challenge
+
+One of the biggest challenges was figuring out how to stream video from my home network to potentially many viewers without:
+
+1. Exposing my home network directly to the internet
+2. Overwhelming my home internet connection's upload bandwidth
+3. Requiring viewers to install special software
+
+**Solution: Single-connection proxied HLS streaming**
+
+- The camera streams RTSP video to the local Raspberry Pi
+- A single secure connection carries this stream to the cloud VPS via Tailscale
+- MediaMTX on the VPS converts the RTSP stream to web-friendly HLS format
+- Each viewer connects to the VPS, not my home network
+- Result: Unlimited viewers with only one connection to my home!
+
+### 🔒 Security Architecture
 
 ```mermaid
 ---
@@ -162,24 +195,88 @@ flowchart LR
     linkStyle 3 stroke:#2962FF,fill:none
 ```
 
-I've set things up so that:
-- All traffic is encrypted (HTTPS and Tailscale)
-- My home devices aren't directly exposed to the internet
-- You need special tokens to control anything
-- Each component only has the permissions it absolutely needs
+Security was a primary concern when building this system:
 
-## 🚀 Why This Works Well
+- **End-to-end encryption** using HTTPS and Tailscale WireGuard
+- **No port forwarding** needed on the home network
+- **Authentication tokens** for secure device-to-device communication
+- **Control system** with timeouts and authorization checks
+- **Rate limiting** to prevent abuse
+- **Profanity filtering** in the chat system
 
-- Handles lots of viewers without breaking my home internet
-- Converts camera video to a format that works well on the web
-- Creates a secure tunnel between my home and the cloud
-- Lets people interact with my chicken setup (which is just fun)
-- Works on pretty much any device with a modern browser
+### 🤖 Control Flow Architecture
 
-## 📝 Todo List
+When you click a button on the web interface, here's what happens:
 
-- [ ] Add time restrictions around control interactions so the chooks get a good night's sleep
-- [ ] Implement rate limiting on the API side of things
-- [ ] Improve cooldown handling for controls
-- [ ] Fix current viewer stats (currently broken)
-- [ ] Redesign control panel for better user experience
+1. Your browser sends a WebSocket message to the control server
+2. The server validates your control permissions
+3. If authorized, it forwards your command through the Tailscale tunnel
+4. The Raspberry Pi receives the command and activates the appropriate hardware
+5. A confirmation message is sent back through the same route
+6. Your browser updates to show the command was executed
+
+All of this happens in milliseconds, giving near real-time control!
+
+### 📊 Sensor Data Collection
+
+The system collects and displays real-time environmental data:
+
+- **Temperature**: BME280 sensor (°C)
+- **Humidity**: BME280 sensor (%)
+- **Pressure**: BME280 sensor (hPa)
+- **Light level**: BH1750 sensor (lx)
+
+This data helps monitor coop conditions and provides interesting information for viewers.
+
+### 🎨 UI Implementation
+
+The web interface features:
+
+- **Retro-terminal aesthetic** with green text on dark background
+- **Seven-segment display** for the viewer count
+- **Draggable control panels** for customizable layout
+- **Visual cooldown indicators** on buttons
+- **Control timer** with circular progress indicator
+- **Mobile-responsive design** that works on any device
+
+### 🐳 Deployment Architecture
+
+The entire system is containerized using Docker for easy deployment and updates:
+
+- **SWAG container**: Web server with automatic SSL certificate renewal
+- **MediaMTX container**: Video streaming server
+- **Chicky-control container**: FastAPI control server
+- **Tailscale container**: Secure networking
+- **Raspberry Pi container**: Hardware control system
+
+## 🚧 Future Improvements
+
+- [ ] Implement more advanced rate limiting on API endpoints
+- [ ] Improve control & cooldown handling for smoother user experience
+- [ ] Utilize a Coral TPU to learn to identify each chicken and name them
+- [ ] Further lock down the tailscale network
+- [ ] Improve chat security
+
+## 🔍 Technologies Used
+
+- **Backend**: FastAPI, Socket.IO, Python
+- **Frontend**: HTML5, CSS3, JavaScript, Video.js
+- **Hardware**: Raspberry Pi, GPIO, BME280, BH1750, Servos
+- **Networking**: Tailscale, RTSP, HLS
+- **Infrastructure**: Docker, SWAG (Nginx + Let's Encrypt), MediaMTX
+
+## 💭 Why This Project?
+
+I built Chicken Feed to solve a unique problem (monitoring my chickens) while exploring the intersection of:
+
+- Internet of Things (IoT) hardware
+- Real-time web technologies
+- Secure remote access
+- Video streaming optimization
+- Interactive user experiences
+
+The result is a fun project that demonstrates practical skills in full-stack development, hardware integration, and secure distributed systems.
+
+---
+
+*Chicken Feed is open source and available for educational purposes. Feel free to use ideas from this project, but please be kind to your chickens if implementing something similar!*
