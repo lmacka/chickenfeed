@@ -86,6 +86,7 @@ services:
     volumes:
       - ./chicky-control:/usr/src/app:rw
       - ./config/keys:/keys:ro
+      - ./data/chat:/config/data:rw  # Persistent volume for chat history and logs
     network_mode: host
     depends_on:
       swag:
