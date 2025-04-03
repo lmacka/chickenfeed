@@ -9,23 +9,16 @@ logger = logging.getLogger(__name__)
 # Consolidated list of chicken breeds from around the world
 CHICKEN_BREEDS = [
     "Australorp", "Wyandotte", "Orpington", "Plymouth", "Rhode", "Bantam",
-    "Delaware", "Jersey", "Dorking", "Sussex", "Cornish", "Silkie",
-    "Barneveld", "Brabanter", "Holland", "Welsummer", "Leghorn", "Brahma",
-    "Cochin", "Hamburg", "Marans", "Minorca", "Ancona", "Faverolle",
-    "Andalusian", "Pekin", "Belgian-d-Uccle", "Belgian-d-Anvers", "Campine",
-    "Langshan", "Barred", "Indian", "Hampshire", "Araucana", "Ameraucana",
-    "Polish", "Houdan", "Frizzle", "Lakenveld", "Sebright", "Dominique",
-    "Java", "Buckeye", "Chantecler", "Sumatra", "Cemani", "Redcap",
-    "Phoenix", "Sultan", "Malay", "Buttercup", "Yokohama", "Cubalaya",
-    "Rosecomb", "Game", "Shamo", "Asil", "Spitz", "Vorwerk",
-    "Kraien", "Naked", "Legbar", "Egger", "Booted", "Serama",
-    "Saxony", "Isbar", "Bresse", "Danish", "Orloff", "Catalan",
-    "Penede", "Rock", "Croad", "Fayoumi", "Sable", "Aseel",
-    "Dover", "Koeyoshi", "Tomaru", "Tuzo", "Brakel", "Crested",
-    "Mille", "Nankin", "Scots", "Sultan", "Swede", "Vienna",
-    "Asturian", "Basque", "Dutch", "Friesian", "Jaerhon", "Lohmann",
-    "Marsh", "Norfolk", "Surrey", "Tunis"
+    "Delaware", "Jersey", "Sussex", "Cornish", "Silkie", "Leghorn",
+    "Brahma", "Cochin", "Hamburg", "Marans", "Minorca", "Ancona",
+    "Faverolle", "Pekin", "Campine", "Langshan", "Araucana", "Ameraucana",
+    "Polish", "Houdan", "Frizzle", "Sebright", "Dominique", "Java",
+    "Buckeye", "Chantecler", "Sumatra", "Phoenix", "Sultan", "Malay",
+    "Buttercup", "Yokohama", "Rosecomb", "Shamo", "Asil", "Vorwerk",
+    "Legbar", "Serama", "Saxony", "Isbar", "Bresse", "Fayoumi",
+    "Aseel", "Koeyoshi", "Tomaru", "Brakel", "Nankin", "d'Uccle"
 ]
+
 # Path to the GeoIP database - adjust as needed
 GEOIP_DB_PATH = Path("/config/GeoLite2-Country.mmdb")
 

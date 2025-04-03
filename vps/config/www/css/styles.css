@@ -915,3 +915,30 @@ input:checked + .toggle-slider:before {
   background: rgba(255, 255, 255, 0.3);
   border-radius: 2px;
 }
+
+.chat-link {
+  color: #4fa4ff;
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.chat-link:hover {
+  color: #80bdff;
+  text-decoration: underline;
+}
+
+.chat-link:visited {
+  color: #c988ff;
+}
+
+/* Add after the existing user styling */
+
+.system {
+  color: #ff3333;
+  font-weight: bold;
+}
+
+.system-message {
+  color: #ff9999;
+  font-style: italic;
+}
