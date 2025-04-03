@@ -16,6 +16,14 @@ export class ChatWindow {
         // Set custom username if it exists in cookies
         if (this.customUsername) {
             this.socket.emit('set_username', { username: this.customUsername });
+        } else {
+            // If no custom username exists, get the default one from the server and store it
+            this.socket.emit('get_username', (response) => {
+                if (response && response.username) {
+                    this.customUsername = response.username;
+                    this.setCookie('chook_username', response.username, 365);
+                }
+            });
         }
         
         this.setupEventListeners();
@@ -25,13 +33,29 @@ export class ChatWindow {
         const input = this.chatPanel.querySelector('#chat-input');
         const closeBtn = this.chatPanel.querySelector('#close-chat');
         const usernameBtn = document.getElementById('username-settings');
+        const messages = this.chatPanel.querySelector('#chat-messages');
 
         const sendMessage = () => {
             const message = input.value.trim();
-            if (message) {
-                this.socket.emit('chat_message', { message });
-                input.value = '';
+            
+            // Client-side validation
+            if (!message) return;
+            
+            if (message.length > 200) {
+                this.displaySystemMessage('Message too long (max 200 characters)');
+                return;
             }
+            
+            // Send message to server and handle response
+            this.socket.emit('chat_message', { message }, (response) => {
+                if (!response || !response.success) {
+                    // Display error message
+                    const errorMessage = response?.error || 'Failed to send message';
+                    this.displaySystemMessage(errorMessage);
+                }
+            });
+            
+            input.value = '';
         };
 
         // Handle enter key
@@ -88,14 +112,46 @@ export class ChatWindow {
         else if (!data.userId.includes('-')) {
             userClass += ' no-country';
         }
+
+        // Process message text to make URLs clickable
+        const messageWithLinks = this.makeLinksClickable(data.message);
         
         msg.innerHTML = `
             <span class="${userClass}" data-timestamp="${formattedDate}">${data.userId}:</span>
-            ${data.message}
+            ${messageWithLinks}
         `;
         
         messages.appendChild(msg);
         messages.scrollTop = messages.scrollHeight;
+    }
+
+    makeLinksClickable(text) {
+        if (!text) return '';
+        
+        // More comprehensive URL regex for better validation
+        const urlRegex = /(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]+\.[^\s]{2,}|www\.[a-zA-Z0-9]+\.[^\s]{2,})/gi;
+        
+        // Replace URLs with clickable links
+        return text.replace(urlRegex, (url) => {
+            try {
+                // If URL starts with www., add https:// prefix
+                const href = url.startsWith('www.') ? 'https://' + url : url;
+                
+                // Basic URL validation
+                const urlObj = new URL(href.startsWith('http') ? href : 'https://' + href);
+                
+                // Whitelist of allowed protocols
+                if (!['http:', 'https:'].includes(urlObj.protocol)) {
+                    return url; // Don't make it a link if protocol isn't allowed
+                }
+                
+                // Create link with security attributes
+                return `<a href="${href}" target="_blank" rel="noopener noreferrer nofollow" class="chat-link">${url}</a>`;
+            } catch (e) {
+                // If URL parsing fails, don't make it clickable
+                return url;
+            }
+        });
     }
 
     loadHistory(messages) {
@@ -120,7 +176,8 @@ export class ChatWindow {
         modal.className = 'username-modal';
         modal.innerHTML = `
             <h3>Set Chat Username</h3>
-            <input type="text" id="username-input" maxlength="20" placeholder="Enter username (max 20 chars)" value="${this.customUsername || ''}">
+            <input type="text" id="username-input" maxlength="20" placeholder="Enter username (3-20 chars)" value="${this.customUsername || ''}">
+            <div class="username-error" style="display: none; color: #ff3333; margin: 5px 0; font-size: 12px;"></div>
             <div class="username-modal-buttons">
                 <button id="save-username">Save</button>
                 <button id="cancel-username">Cancel</button>
@@ -132,17 +189,38 @@ export class ChatWindow {
         
         // Focus input
         const input = document.getElementById('username-input');
+        const errorDiv = modal.querySelector('.username-error');
         input.focus();
+        
+        // Function to display error message
+        const showError = (message) => {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        };
         
         // Add event listeners
         document.getElementById('save-username').addEventListener('click', () => {
             const username = input.value.trim();
+            
+            // Client-side validation
+            if (username && username.length < 3) {
+                showError('Username must be at least 3 characters long');
+                return;
+            }
+            
+            if (username && !/^[a-zA-Z0-9_\-\.]+$/.test(username)) {
+                showError('Username can only contain letters, numbers, underscores, hyphens and periods');
+                return;
+            }
+            
             if (username) {
                 this.socket.emit('set_username', { username }, (response) => {
                     if (response.success) {
                         this.customUsername = response.username;
                         this.setCookie('chook_username', response.username, 365); // Store for 1 year
                         modal.remove();
+                    } else {
+                        showError(response.error || 'Failed to set username');
                     }
                 });
             }
@@ -187,5 +265,15 @@ export class ChatWindow {
     
     deleteCookie(name) {
         document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;SameSite=Strict`;
+    }
+    
+    // Helper method to display system messages (errors, notifications)
+    displaySystemMessage(message) {
+        const messages = this.chatPanel.querySelector('#chat-messages');
+        const msg = document.createElement('div');
+        msg.className = 'message system-message';
+        msg.innerHTML = `<span class="system">SYSTEM:</span> ${message}`;
+        messages.appendChild(msg);
+        messages.scrollTop = messages.scrollHeight;
     }
 } 

@@ -37,10 +37,25 @@ def create_app() -> FastAPI:
     # Add CORS middleware
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=[
+            "https://onlychicks.tv",
+            "https://chook.cam",
+            # Include www subdomains if needed
+            "https://www.onlychicks.tv",
+            "https://www.chook.cam",
+            # Include localhost for development if needed
+            "http://localhost:3000",
+            "http://localhost:8080"
+        ],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "OPTIONS"],  # Restrict to only needed methods
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "X-Requested-With",
+            "Accept",
+            "Origin"
+        ],
     )
     
     # Include API routes

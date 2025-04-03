@@ -6,9 +6,12 @@ import logging
 import asyncio
 import json
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, DefaultDict
 from datetime import datetime, timezone, timedelta
 import pytz
+from collections import defaultdict
+import time
+import re
 
 import socketio
 from fastapi import FastAPI
@@ -42,6 +45,21 @@ chat_file_handler = logging.FileHandler(CHAT_LOG_FILE)
 chat_file_handler.setFormatter(logging.Formatter('%(asctime)s | %(message)s', '%Y-%m-%d %H:%M:%S'))
 chat_logger.addHandler(chat_file_handler)
 
+# Rate limiting configuration
+CHAT_RATE_LIMIT = int(os.environ.get('CHAT_RATE_LIMIT', 5))  # messages per time window
+CHAT_RATE_WINDOW = int(os.environ.get('CHAT_RATE_WINDOW', 10))  # time window in seconds
+USERNAME_RATE_LIMIT = int(os.environ.get('USERNAME_RATE_LIMIT', 3))  # changes per day
+USERNAME_RATE_WINDOW = int(os.environ.get('USERNAME_RATE_WINDOW', 86400))  # 24 hours in seconds
+
+# Rate limiting storage
+message_timestamps: DefaultDict[str, List[float]] = defaultdict(list)  # sid -> list of timestamps
+username_changes: DefaultDict[str, List[float]] = defaultdict(list)  # sid -> list of timestamps
+
+# URL validation regex (basic pattern)
+URL_PATTERN = re.compile(
+    r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+)
+
 # Global state
 light_state = False
 visitor_count = 0
@@ -61,6 +79,53 @@ AUSTRALIA_TZ = pytz.timezone('Australia/Brisbane')
 
 # Initialize profanity filter
 profanity.load_censor_words()
+
+def check_rate_limit(storage: DefaultDict[str, List[float]], sid: str, 
+                     limit: int, window: int) -> bool:
+    """
+    Check if a request is within rate limits
+    
+    Args:
+        storage: DefaultDict storing timestamps of previous requests
+        sid: Session ID of the requester
+        limit: Maximum number of requests allowed in the time window
+        window: Time window in seconds
+        
+    Returns:
+        True if request is allowed, False if rate limited
+    """
+    current_time = time.time()
+    
+    # Remove timestamps older than the window
+    storage[sid] = [t for t in storage[sid] if current_time - t < window]
+    
+    # Check if rate limit is exceeded
+    if len(storage[sid]) >= limit:
+        return False
+    
+    # Add current timestamp
+    storage[sid].append(current_time)
+    return True
+
+def is_valid_chat_message(message: str) -> bool:
+    """
+    Validate chat message content
+    
+    Args:
+        message: Message content to validate
+        
+    Returns:
+        True if message is valid, False otherwise
+    """
+    # Check if message is empty after trimming
+    if not message.strip():
+        return False
+    
+    # Check message length (already limited to 200 chars elsewhere)
+    if len(message) > 200:
+        return False
+        
+    return True
 
 def load_chat_history() -> List[Dict[str, Any]]:
     """
@@ -140,7 +205,16 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
     # Create Socket.IO server
     sio = socketio.AsyncServer(
         async_mode="asgi",
-        cors_allowed_origins="*",
+        cors_allowed_origins=[
+            "https://onlychicks.tv",
+            "https://chook.cam",
+            # Include www subdomains if needed
+            "https://www.onlychicks.tv",
+            "https://www.chook.cam",
+            # Include localhost for development if needed
+            "http://localhost:3000",
+            "http://localhost:8080"
+        ],
         logger=False,
         engineio_logger=False,
     )
@@ -490,7 +564,22 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
         global chat_history
         
         if not isinstance(data, dict) or 'message' not in data:
-            return
+            return {"success": False, "error": "Invalid request format"}
+        
+        # Get message text
+        message_text = data['message']
+        
+        # Input validation
+        if not is_valid_chat_message(message_text):
+            return {"success": False, "error": "Invalid message content"}
+        
+        # Rate limiting
+        if not check_rate_limit(message_timestamps, sid, CHAT_RATE_LIMIT, CHAT_RATE_WINDOW):
+            logger.warning(f"Rate limit exceeded for chat messages from {sid}")
+            return {
+                "success": False, 
+                "error": f"Rate limit exceeded. Maximum {CHAT_RATE_LIMIT} messages per {CHAT_RATE_WINDOW} seconds."
+            }
         
         # Get session data to access user information
         session = await sio.get_session(sid)
@@ -501,7 +590,7 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
         country = session.get('country_code')
         
         # Clean the message
-        clean_message = profanity.censor(data['message'][:200])
+        clean_message = profanity.censor(message_text[:200])
         
         # Get current time in Australian timezone
         now = datetime.now(tz=AUSTRALIA_TZ)
@@ -526,6 +615,8 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
         
         # Broadcast to all clients
         await sio.emit('chat_message', message)
+        
+        return {"success": True}
     
     @sio.event
     async def set_username(sid, data):
@@ -544,9 +635,25 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
             await sio.save_session(sid, session)
             return {'success': True, 'message': 'Username reset to default'}
         
+        # Rate limiting for username changes
+        if not check_rate_limit(username_changes, sid, USERNAME_RATE_LIMIT, USERNAME_RATE_WINDOW):
+            logger.warning(f"Rate limit exceeded for username changes from {sid}")
+            return {
+                'success': False, 
+                'error': f'Rate limit exceeded. Maximum {USERNAME_RATE_LIMIT} username changes per day.'
+            }
+        
         # Validate and clean username
         if len(username) > 20:
             username = username[:20]
+        
+        # Ensure username has minimum length
+        if len(username) < 3:
+            return {'success': False, 'error': 'Username must be at least 3 characters long'}
+        
+        # Check for valid characters (alphanumeric and some special chars)
+        if not re.match(r'^[a-zA-Z0-9_\-\.]+$', username):
+            return {'success': False, 'error': 'Username contains invalid characters'}
         
         username = profanity.censor(username)
         
