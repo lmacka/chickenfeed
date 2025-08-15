@@ -112,6 +112,12 @@ def setup_light_schedule(
         )
         return False
     
+    # Get timezone offset (default to 0 if not set)
+    timezone_offset = config.get("timezone_offset", 0)
+    if timezone_offset is None:
+        logger.warning("Timezone offset not configured, defaulting to UTC")
+        timezone_offset = 0
+    
     # Clear existing schedule
     schedule.clear()
     
@@ -124,7 +130,23 @@ def setup_light_schedule(
         logger.warning("Failed to parse time configuration")
         return False
     
-    logger.info(f"Setting up light schedule: ON at {on_time}, OFF at {off_time}")
+    # Convert local times to UTC for scheduling
+    # Since the system runs in UTC, we need to subtract the timezone offset
+    # to get the UTC time that corresponds to the desired local time
+    on_hour, on_minute = map(int, on_time.split(':'))
+    off_hour, off_minute = map(int, off_time.split(':'))
+    
+    # Convert to UTC by subtracting timezone offset
+    utc_on_hour = (on_hour - timezone_offset) % 24
+    utc_off_hour = (off_hour - timezone_offset) % 24
+    
+    # Format UTC times for scheduling
+    utc_on_time = f"{utc_on_hour:02d}:{on_minute:02d}"
+    utc_off_time = f"{utc_off_hour:02d}:{off_minute:02d}"
+    
+    logger.info(f"Setting up light schedule:")
+    logger.info(f"  Local times (GMT+{timezone_offset}): ON at {on_time}, OFF at {off_time}")
+    logger.info(f"  UTC times for scheduling: ON at {utc_on_time}, OFF at {utc_off_time}")
     
     # Create wrapper functions that capture the current socket
     async def turn_on_job():
@@ -137,11 +159,11 @@ def setup_light_schedule(
         socket = get_socket()
         return await auto_shutoff_light(socket, is_connected)
     
-    # Schedule light turn-on job
-    schedule.every().day.at(on_time).do(turn_on_job)
+    # Schedule light turn-on job at UTC time
+    schedule.every().day.at(utc_on_time).do(turn_on_job)
     
-    # Schedule light turn-off job
-    schedule.every().day.at(off_time).do(turn_off_job)
+    # Schedule light turn-off job at UTC time
+    schedule.every().day.at(utc_off_time).do(turn_off_job)
     
     # Start the scheduler thread if not already running
     start_scheduler_thread()
