@@ -43,7 +43,7 @@ services:
       - TS_AUTHKEY=${TS_AUTHKEY}
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_USERSPACE=false
-      - TS_EXTRA_ARGS=--accept-routes=true
+      - TS_EXTRA_ARGS=--accept-routes=true --advertise-tags=tag:container
     volumes:
       - ./tailscale:/var/lib/tailscale
       - /dev/net/tun:/dev/net/tun
