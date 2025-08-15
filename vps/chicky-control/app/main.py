@@ -38,10 +38,8 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
-            "https://onlychicks.tv",
             "https://chook.cam",
-            # Include www subdomains if needed
-            "https://www.onlychicks.tv",
+            # Include www subdomain if needed
             "https://www.chook.cam",
             # Include localhost for development if needed
             "http://localhost:3000",
