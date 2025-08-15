@@ -54,3 +54,8 @@ pids/
 vps/.env
 vps/mediamtx.yml
 chicky/.env
+
+# Other
+vps/data/
+vps/config/
+!vps/config/www
