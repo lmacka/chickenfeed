@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:fb="http://ogp.me/ns/fb#">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OnlyChicks.tv - For the love of chooks!</title>
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://onlychicks.tv/">
+  <meta property="og:title" content="OnlyChicks.tv - For the love of chooks!">
+  <meta property="og:description" content="Watch and interact with live chickens! Control the camera, dispense treats, and chat with other viewers in real-time.">
+  <meta property="og:image" content="https://onlychicks.tv/img/screenshot-lg.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:video" content="https://onlychicks.tv/img/OnlyChicks.mp4">
+  <meta property="og:video:type" content="video/mp4">
+  <meta property="og:video:width" content="1200">
+  <meta property="og:video:height" content="630">
+  
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="https://onlychicks.tv/">
+  <meta name="twitter:title" content="OnlyChicks.tv - For the love of chooks!">
+  <meta name="twitter:description" content="Watch and interact with live chickens! Control the camera, dispense treats, and chat with other viewers in real-time.">
+  <meta name="twitter:image" content="https://onlychicks.tv/img/screenshot-lg.png">
+  <meta name="twitter:player" content="https://onlychicks.tv/img/OnlyChicks.mp4">
+  <meta name="twitter:player:width" content="1200">
+  <meta name="twitter:player:height" content="630">
+  
+  <link rel="icon" href="favicon.webp" type="image/webp">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+  <!-- Video.js CSS -->
+  <link href="https://vjs.zencdn.net/8.21.1/video-js.css" rel="stylesheet" />
+  <!-- jQuery and jQuery UI for sevenSeg.js -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+  <!-- sevenSeg.js for viewer count display -->
+  <script src="https://brandonlwhite.github.io/sevenSeg.js/sevenSeg.js"></script>
+  <!-- Custom CSS -->
+  <link href="css/styles.css" rel="stylesheet" />
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-J5C4JZPG37"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-J5C4JZPG37');
+  </script>
+</head>
+
+<body>
+  <div class="video-container">
+    <video id="chicken-stream" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" playsinline muted>
+      <!-- Sources will be added via JavaScript -->
+      <p class="vjs-no-js">
+        To view this video please enable JavaScript, and consider upgrading to a
+        web browser that supports HTML5 video
+      </p>
+    </video>
+  </div>
+
+  <!-- PTZ Control Panel -->
+  <div id="ptz-control-panel">
+    <div class="panel-header">
+      <h3 class="panel-title">CHOOK CONSOLE v2.0</h3>
+      <div class="panel-controls">
+        <button class="panel-control" id="info-button" title="View on GitHub">
+          <span class="icon icon-info"></span>
+        </button>
+        <button class="panel-control" id="chat-button" title="Chat">
+          <span class="icon icon-chat">💬</span>
+        </button>
+        <button class="panel-control" id="close-panel" title="Close">
+          <span class="icon icon-close"></span>
+        </button>
+      </div>
+    </div>
+    
+    <div class="panel-body">
+      <div class="status-grid">
+        <div class="control-section">
+          <h4 class="section-title">CONTROL</h4>
+          <div class="status-box">
+            <div class="power-button" id="take-control-button">
+              <div class="power-icon"></div>
+              <svg class="control-progress-ring" viewBox="0 0 60 60">
+                <circle id="control-timer-circle" cx="30" cy="30" r="26" stroke-dasharray="163.36" stroke-dashoffset="163.36"></circle>
+              </svg>
+            </div>
+          </div>
+        </div>
+        
+        <div class="control-section">
+          <h4 class="section-title">VIEWERS</h4>
+          <div class="status-box">
+            <div class="viewers-count" id="viewers-count">0</div>
+            <div class="seven-seg-container">
+              <div id="seven-seg-display"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="control-section">
+        <h4 class="section-title">Camera Positions</h4>
+        <div class="camera-controls">
+          <button class="control-btn camera-btn" id="preset-1">
+            <span class="btn-icon">📹</span>
+            HEATER
+            <div class="cooldown-overlay" id="cooldown-1"></div>
+          </button>
+          <button class="control-btn camera-btn" id="preset-2">
+            <span class="btn-icon">📹</span>
+            WATER
+            <div class="cooldown-overlay" id="cooldown-2"></div>
+          </button>
+          <button class="control-btn camera-btn" id="preset-3">
+            <span class="btn-icon">📹</span>
+            TREATS
+            <div class="cooldown-overlay" id="cooldown-3"></div>
+          </button>
+          <button class="control-btn camera-btn" id="preset-4">
+            <span class="btn-icon">📹</span>
+            PERCH
+            <div class="cooldown-overlay" id="cooldown-4"></div>
+          </button>
+        </div>
+      </div>
+      
+      <div class="control-section">
+        <h4 class="section-title">Auxiliary Systems</h4>
+        <div class="aux-controls">
+          <button class="control-btn aux-btn" id="give-treat">
+            <span class="btn-icon">🪱</span>
+            TREAT
+            <div class="cooldown-overlay" id="cooldown-treat"></div>
+          </button>
+          <button class="control-btn aux-btn" id="toggle-light">
+            <span class="btn-icon">💡</span>
+            LIGHT
+            <div class="cooldown-overlay" id="cooldown-light"></div>
+          </button>
+        </div>
+      </div>
+      
+      <div class="terminal" id="response-terminal">
+        SYSTEM READY. STANDING BY.<span class="cursor">█</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="chat-panel" class="floating-panel" style="display: none;">
+    <div class="panel-header">
+      <h3 class="panel-title">CHOOK CHAT</h3>
+      <div class="panel-controls">
+        <button class="panel-control" id="username-settings" title="Change Username">
+          <span class="icon icon-user">👤</span>
+        </button>
+        <button class="panel-control" id="close-chat" title="Close">
+          <span class="icon icon-close"></span>
+        </button>
+      </div>
+    </div>
+    <div class="chat-terminal">
+      <div id="chat-messages">
+        CHAT SYSTEM INITIALIZED. STANDING BY.<span class="cursor">█</span>
+      </div>
+      <div class="input-line">
+        <span class="prompt">&gt;</span>
+        <input type="text" id="chat-input" maxlength="200" spellcheck="false">
+      </div>
+    </div>
+  </div>
+
+  <!-- Video.js and Socket.io -->
+  <script src="https://vjs.zencdn.net/8.21.1/video.min.js"></script>
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  
+  <!-- Application Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/interact.js/1.10.17/interact.min.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+
+</html> 
