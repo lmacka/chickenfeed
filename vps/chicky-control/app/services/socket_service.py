@@ -206,10 +206,8 @@ def create_socketio_app(auth_token: str) -> socketio.ASGIApp:
     sio = socketio.AsyncServer(
         async_mode="asgi",
         cors_allowed_origins=[
-            "https://onlychicks.tv",
             "https://chook.cam",
-            # Include www subdomains if needed
-            "https://www.onlychicks.tv",
+            # Include www subdomain if needed
             "https://www.chook.cam",
             # Include localhost for development if needed
             "http://localhost:3000",
