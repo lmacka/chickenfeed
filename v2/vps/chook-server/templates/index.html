@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chook.cam - Live Chicken Cam</title>
+    <meta name="description" content="Watch and interact with live chickens! Control the camera, dispense treats, and chat with other viewers in real-time.">
+    
+    <!-- OpenGraph Meta Tags -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://chook.cam/">
+    <meta property="og:title" content="Chook.cam - For the love of chooks!">
+    <meta property="og:description" content="Watch and interact with live chickens! Control the camera, dispense treats, and chat with other viewers in real-time.">
+    <meta property="og:image" content="https://chook.cam/static/screenshot-lg.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="https://chook.cam/">
+    <meta name="twitter:title" content="Chook.cam - For the love of chooks!">
+    <meta name="twitter:description" content="Watch and interact with live chickens! Control the camera, dispense treats, and chat with other viewers in real-time.">
+    <meta name="twitter:image" content="https://chook.cam/static/screenshot-lg.png">
+    
+    <link rel="icon" type="image/webp" href="/static/favicon.webp">
+    <link rel="stylesheet" href="/static/style.css">
+    
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-J5C4JZPG37"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-J5C4JZPG37');
+    </script>
+    
+    <script src="/static/htmx.min.js"></script>
+    <script src="/static/htmx-sse.js"></script>
+    <script src="/static/hls.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1 class="title">🐔 Chook.cam</h1>
+            <div class="header-info">
+                <span class="viewer-count">
+                    Viewers: <span id="viewer-count">{{.ViewerCount}}</span>
+                </span>
+                <span class="health-indicator">
+                    <span id="health-dot" class="{{if .PiHealthy}}healthy{{else}}unhealthy{{end}}"></span>
+                    {{if .PiHealthy}}Online{{else}}Offline{{end}}
+                </span>
+                <a href="https://github.com/lmacka/chickenfeed" target="_blank" class="github-link">
+                    GitHub
+                </a>
+            </div>
+        </header>
+
+        <!-- Main content grid -->
+        <main class="main-grid">
+            <!-- Video player section -->
+            <section class="video-section">
+                <video id="video-player" class="video-player" controls playsinline muted>
+                    Your browser does not support video playback.
+                </video>
+            </section>
+
+            <!-- Control panel section -->
+            <section class="control-section">
+                <h2 class="section-title">Camera Controls</h2>
+                <div class="camera-controls" id="camera-controls">
+                    <button class="control-btn" 
+                            hx-post="/api/camera/1" 
+                            hx-target="#status" 
+                            hx-swap="innerHTML"
+                            {{if not .PiHealthy}}disabled{{end}}>
+                        🔥 HEATER
+                    </button>
+                    <button class="control-btn" 
+                            hx-post="/api/camera/2" 
+                            hx-target="#status" 
+                            hx-swap="innerHTML"
+                            {{if not .PiHealthy}}disabled{{end}}>
+                        🥤 FEEDER
+                    </button>
+                    <button class="control-btn" 
+                            hx-post="/api/camera/3" 
+                            hx-target="#status" 
+                            hx-swap="innerHTML"
+                            {{if not .PiHealthy}}disabled{{end}}>
+                        🪟 WINDOW
+                    </button>
+                    <button class="control-btn" 
+                            hx-post="/api/camera/4" 
+                            hx-target="#status" 
+                            hx-swap="innerHTML"
+                            {{if not .PiHealthy}}disabled{{end}}>
+                        🪱 TREATS
+                    </button>
+                </div>
+
+                <h2 class="section-title">Hardware Controls</h2>
+                <div class="hardware-controls">
+                    <button class="control-btn control-btn-special" 
+                            hx-post="/api/treat" 
+                            hx-target="#status" 
+                            hx-swap="innerHTML"
+                            {{if not .PiHealthy}}disabled{{end}}>
+                        🪱 Dispense Treat
+                    </button>
+                    <button class="control-btn control-btn-special" 
+                            hx-post="/api/light" 
+                            hx-target="#status" 
+                            hx-swap="innerHTML"
+                            {{if not .PiHealthy}}disabled{{end}}>
+                        💡 Toggle Light
+                    </button>
+                </div>
+
+                <!-- Status display -->
+                <div id="status" class="status-display">
+                    {{if not .PiHealthy}}
+                    <div class="status-message error">Controller offline - controls disabled</div>
+                    {{else}}
+                    <div class="status-message">Ready for commands</div>
+                    {{end}}
+                </div>
+            </section>
+
+            <!-- Sensor display section -->
+            <section class="sensor-section">
+                <h2 class="section-title">Environment</h2>
+                <div id="sensors" class="sensor-display" 
+                     hx-get="/api/sensors" 
+                     hx-trigger="load, every 30s"
+                     hx-swap="innerHTML">
+                    <div class="sensor-loading">Loading sensors...</div>
+                </div>
+            </section>
+
+            <!-- Chat section -->
+            <section class="chat-section">
+                <h2 class="section-title">Chat</h2>
+                <div id="chat-messages" class="chat-messages"
+                     hx-get="/chat/history"
+                     hx-trigger="load"
+                     hx-swap="innerHTML">
+                    <div class="chat-placeholder">Chat loading...</div>
+                </div>
+                <div id="chat-error"></div>
+                <form id="chat-form" class="chat-input-form" 
+                      hx-post="/chat/send" 
+                      hx-trigger="submit"
+                      hx-swap="none"
+                      hx-on="htmx:afterRequest: if(event.detail.successful) this.reset()">
+                    <input type="hidden" name="username" id="username-field">
+                    <input type="text" 
+                           name="message" 
+                           id="chat-input"
+                           class="chat-input" 
+                           placeholder="Set your username" 
+                           maxlength="200"
+                           autocomplete="off">
+                    <button type="submit" id="chat-button" class="chat-send">Set</button>
+                </form>
+            </section>
+        </main>
+    </div>
+
+    <!-- Initialize HLS video player -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const video = document.getElementById('video-player');
+            const videoSrc = '/hls/feed_lowres/index.m3u8'; // MediaMTX HLS stream
+            
+            // Mute video to allow autoplay (no audio in feed anyway)
+            video.muted = true;
+            
+            if (Hls.isSupported()) {
+                const hls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    backBufferLength: 90
+                });
+                hls.loadSource(videoSrc);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    video.play().catch(e => {
+                        console.log('Autoplay prevented:', e);
+                    });
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = videoSrc;
+            }
+        });
+    </script>
+
+    <!-- SSE for real-time updates -->
+    <div hx-ext="sse" sse-connect="/events" style="display: none;">
+        <div sse-swap="viewers">
+            <span hx-swap-oob="true" id="viewer-count"></span>
+        </div>
+        <div sse-swap="health">
+            <span hx-swap-oob="true" id="health-status"></span>
+        </div>
+        <div sse-swap="sensors">
+            <div hx-swap-oob="true" id="sensors"></div>
+        </div>
+        <div sse-swap="chat">
+            <div hx-swap-oob="true" id="chat-messages" hx-swap="beforeend"></div>
+        </div>
+    </div>
+    
+    <!-- JavaScript to handle SSE updates -->
+    <script>
+        // Handle SSE events manually for better control
+        document.addEventListener('DOMContentLoaded', function() {
+            const evtSource = new EventSource('/events');
+            
+            evtSource.addEventListener('viewers', function(e) {
+                document.getElementById('viewer-count').innerText = e.data;
+            });
+            
+            evtSource.addEventListener('health', function(e) {
+                const data = JSON.parse(e.data);
+                const healthDot = document.getElementById('health-dot');
+                const healthStatus = healthDot.parentElement;
+                
+                if (data.piHealthy) {
+                    healthDot.className = 'healthy';
+                    healthStatus.innerHTML = '<span id="health-dot" class="healthy"></span> Online';
+                } else {
+                    healthDot.className = 'unhealthy';
+                    healthStatus.innerHTML = '<span id="health-dot" class="unhealthy"></span> Offline';
+                }
+            });
+            
+            evtSource.addEventListener('sensors', function(e) {
+                const data = JSON.parse(e.data);
+                const sensorDiv = document.getElementById('sensors');
+                sensorDiv.innerHTML = `<div>${data.Temperature.toFixed(1)}°C | ${data.Pressure.toFixed(0)}hPa | ${data.Humidity.toFixed(0)}% | ${data.Light.toFixed(0)}lx</div>`;
+            });
+            
+            evtSource.addEventListener('chat', function(e) {
+                const data = JSON.parse(e.data);
+                const chatDiv = document.getElementById('chat-messages');
+                // Remove placeholder if it exists
+                const placeholder = chatDiv.querySelector('.chat-placeholder');
+                if (placeholder) {
+                    placeholder.remove();
+                }
+                // Add new message
+                const messageHtml = `<div class="chat-message">
+                    <span class="chat-username">${data.username || data.Username}:</span>
+                    <span class="chat-text">${data.message || data.Message}</span>
+                    <span class="chat-time">${new Date(data.timestamp || data.Timestamp).toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit', hour12: false})}</span>
+                </div>`;
+                chatDiv.insertAdjacentHTML('beforeend', messageHtml);
+                // Scroll to bottom
+                chatDiv.scrollTop = chatDiv.scrollHeight;
+            });
+            
+            evtSource.onerror = function(err) {
+                console.error("SSE error:", err);
+            };
+        });
+        
+        // Handle username setup
+        document.addEventListener('DOMContentLoaded', function() {
+            const usernameField = document.getElementById('username-field');
+            const chatInput = document.getElementById('chat-input');
+            const chatButton = document.getElementById('chat-button');
+            const chatForm = document.getElementById('chat-form');
+            
+            // Check for stored username
+            const storedUsername = localStorage.getItem('chookUsername');
+            
+            if (storedUsername) {
+                // User has a username, set up for chat
+                usernameField.value = storedUsername;
+                chatInput.placeholder = 'Type a message...';
+                chatButton.textContent = 'Send';
+                chatForm.setAttribute('data-mode', 'chat');
+            } else {
+                // User needs to set username
+                chatForm.setAttribute('data-mode', 'username');
+            }
+            
+            // Override form submission to handle username vs chat
+            chatForm.addEventListener('htmx:configRequest', function(evt) {
+                const mode = chatForm.getAttribute('data-mode');
+                const inputValue = chatInput.value.trim();
+                
+                if (mode === 'username' && inputValue) {
+                    // Setting username - don't send to server, just store locally
+                    evt.preventDefault();
+                    
+                    // Validate username (alphanumeric, 3-20 chars)
+                    if (inputValue.length < 3 || inputValue.length > 20) {
+                        document.getElementById('chat-error').innerHTML = '<div class="chat-error">Username must be 3-20 characters</div>';
+                        setTimeout(() => document.getElementById('chat-error').innerHTML = '', 3000);
+                        return;
+                    }
+                    
+                    if (!/^[a-zA-Z0-9_]+$/.test(inputValue)) {
+                        document.getElementById('chat-error').innerHTML = '<div class="chat-error">Username can only contain letters, numbers, and underscores</div>';
+                        setTimeout(() => document.getElementById('chat-error').innerHTML = '', 3000);
+                        return;
+                    }
+                    
+                    // Store username
+                    localStorage.setItem('chookUsername', inputValue);
+                    usernameField.value = inputValue;
+                    
+                    // Switch to chat mode
+                    chatInput.value = '';
+                    chatInput.placeholder = 'Type a message...';
+                    chatButton.textContent = 'Send';
+                    chatForm.setAttribute('data-mode', 'chat');
+                    
+                    // Show success
+                    document.getElementById('chat-error').innerHTML = `<div class="chat-success">Welcome, ${inputValue}!</div>`;
+                    setTimeout(() => document.getElementById('chat-error').innerHTML = '', 3000);
+                } else if (mode === 'chat') {
+                    // Sending chat message - include username
+                    evt.detail.parameters['username'] = usernameField.value;
+                }
+            });
+        });
+    </script>
+</body>
+</html>
