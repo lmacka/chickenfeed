@@ -1,0 +1,26 @@
+name: chickenfeed-v2
+type: sw.application
+description: Chickenfeed v2 - Simplified chicken coop controller
+assets:
+  repository:
+    type: blob.asset
+    data:
+      url: https://github.com/lmacka/chickenfeed
+  logo:
+    type: blob.asset
+    data:
+      url: https://raw.githubusercontent.com/lmacka/chickenfeed/refs/heads/main/docs/chickenfeed.webp
+data:
+  applicationEnvironmentVariables:
+    - PORT: 3000
+    - LOG_LEVEL: INFO
+  defaultDeviceType: raspberry-pi5
+  supportedDeviceTypes:
+    - raspberry-pi5
+    - raspberrypi4-64
+    - raspberrypi3
+  deviceConfiguration:
+    - BALENA_HOST_CONFIG_dtoverlay: pwm
+    - BALENA_HOST_CONFIG_dtparam: i2c_arm=on
+    - BALENA_HOST_CONFIG_dtparam: spi=on
+version: 2.0.0

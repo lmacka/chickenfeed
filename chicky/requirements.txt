@@ -1,5 +1,0 @@
-automationhat==1.0.0
-rpi-lgpio>=0.2.2.0
-schedule==1.2.2
-pimoroni-bme280>=1.0.0
-ads1x15-adc>=1.2.2
