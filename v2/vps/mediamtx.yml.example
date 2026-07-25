@@ -29,7 +29,12 @@ hlsAddress: :8888
 hlsVariant: mpegts
 hlsAllowOrigins: ['*']
 hlsTrustedProxies: [172.16.0.0/12]
-hlsAlwaysRemux: false
+# Keep the HLS muxer running continuously instead of starting it on demand.
+# The Tapo's clock jumps backwards periodically; ffmpeg clamps the DTS and a
+# muxer started mid-stream then dies with "unable to extract DTS: too many
+# reordered frames". Starting once with the stream and staying up avoids
+# repeatedly re-entering that state on every viewer request.
+hlsAlwaysRemux: true
 
 # --- unused ingest/egress, kept off to shrink the surface ---
 rtsp: false
