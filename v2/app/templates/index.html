@@ -42,8 +42,16 @@
       </div>
     </div>
 
+    <!-- Turnstile gates entry to the control queue, once per visitor. It is not
+         on the treat/light/PTZ buttons: those already require the seat token
+         that a verified join issues, so re-challenging per press would add
+         friction without adding a gate. -->
     <div id="turnstile-holder" class="turnstile" hidden>
-      {{if .TurnstileKey}}<div class="cf-turnstile" data-sitekey="{{.TurnstileKey}}" data-theme="dark" data-size="flexible"></div>{{end}}
+      {{if .TurnstileKey}}<div class="cf-turnstile"
+           data-sitekey="{{.TurnstileKey}}"
+           data-action="turnstile-spin-v2"
+           data-theme="dark"
+           data-size="flexible"></div>{{end}}
     </div>
 
     <span class="label">Camera Positions</span>
