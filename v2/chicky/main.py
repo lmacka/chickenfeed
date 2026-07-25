@@ -13,9 +13,9 @@ a treat; this process decides whether one happens.
 """
 import os
 import logging
-from contextlib import asynccontextmanager
 from typing import Dict, Any
 
+import fastapi
 from fastapi import FastAPI, HTTPException
 import uvicorn
 
@@ -53,9 +53,16 @@ safety = SafetyEnvelope(relay=relay)
 mqtt_bridge = MqttBridge(servo=servo, relay=relay, sensors=sensors, safety=safety)
 
 
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
-    logger.info("Chicky Controller starting up...")
+app = FastAPI(title="Chicky Controller", version="2.1")
+
+
+# NOTE: on_event, not the newer lifespan= argument. The image installs Debian's
+# python3-fastapi (0.92), whose FastAPI.__init__ takes **extra and therefore
+# SILENTLY SWALLOWS an unknown lifespan kwarg: startup never runs, MQTT never
+# connects, and nothing is logged. Verified 0.92.0 / starlette 0.26.1 on the Pi.
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Chicky Controller starting up (fastapi %s)...", getattr(fastapi, "__version__", "?"))
     if HARDWARE_AVAILABLE:
         try:
             if sensors:
@@ -72,8 +79,9 @@ async def lifespan(_app: FastAPI):
     except Exception as e:
         logger.error(f"MQTT bridge failed to start, continuing without it: {e}")
 
-    yield
 
+@app.on_event("shutdown")
+async def shutdown_event():
     logger.info("Chicky Controller shutting down...")
     try:
         mqtt_bridge.stop()
@@ -90,9 +98,6 @@ async def lifespan(_app: FastAPI):
             logger.info("Hardware cleanup complete")
         except Exception as e:
             logger.error(f"Hardware cleanup error: {e}")
-
-
-app = FastAPI(title="Chicky Controller", version="2.1", lifespan=lifespan)
 
 
 @app.get("/health")
