@@ -1,0 +1,71 @@
+###############################################
+# chook.cam video relay
+#
+# The cluster PUSHES here over SRT. This box never reaches into the home
+# network: that reach-in dependency is what took chook.cam down for months.
+#
+# Video-only by design. WebRTC cannot carry AAC, and mediamtx has been
+# observed to panic and exit when a WHEP viewer connects to a stream that
+# carries an AAC track. The publisher must send -an.
+###############################################
+logLevel: info
+
+# --- ingest ---
+srt: true
+srtAddress: :8890
+
+# --- egress ---
+webrtc: true
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+webrtcAdditionalHosts: [103.100.38.128]
+webrtcAllowOrigins: ['*']
+webrtcTrustedProxies: [172.16.0.0/12]
+
+hls: true
+hlsAddress: :8888
+# mpegts, not lowLatency: on this 15fps source LL-HLS part durations vary and
+# mediamtx warns that will error on iOS clients. WebRTC is the low-latency path.
+hlsVariant: mpegts
+hlsAllowOrigins: ['*']
+hlsTrustedProxies: [172.16.0.0/12]
+hlsAlwaysRemux: false
+
+# --- unused ingest/egress, kept off to shrink the surface ---
+rtsp: false
+rtmp: false
+api: false
+
+metrics: true
+metricsAddress: :9998
+
+# Defining authInternalUsers REPLACES the built-in defaults, so the public
+# read entry has to be restated here. The default only permits the metrics
+# action from 127.0.0.1, which nginx (on the docker bridge) is not, so the
+# scrape 401'd until the bridge was added.
+authInternalUsers:
+  # Public viewers. Publishing is gated separately by srtPublishPassphrase,
+  # and only the 'coop' path exists, so an unknown path is refused anyway.
+  - user: any
+    pass:
+    permissions:
+      - action: publish
+      - action: read
+  # Metrics scrape, reachable only from localhost and the docker bridge.
+  # nginx puts HTTP basic auth in front of it before it reaches the internet.
+  - user: any
+    pass:
+    ips: ["127.0.0.1", "::1", "172.16.0.0/12"]
+    permissions:
+      - action: api
+      - action: metrics
+      - action: pprof
+
+paths:
+  coop:
+    # NOTE: this file holds a secret, so it is gitignored and NOT in the public
+    # repo. See mediamtx.yml.example for the committed template.
+    # Per-path env overrides (MTX_PATHS_COOP_...) are NOT usable: mediamtx
+    # 1.19.3 panics with "reflect.Value.Addr of unaddressable value" when
+    # descending into the paths map.
+    srtPublishPassphrase: CHANGEME-set-a-real-passphrase
