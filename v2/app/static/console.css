@@ -1,0 +1,93 @@
+/* Chook console.
+   Keeps the identity of the retired UI: floating terminal panel over a
+   full-bleed coop feed, phosphor green on near-black, seven-segment readout. */
+:root{
+  --bg:#0a0a0a; --panel:#1c1713; --panel2:#241d17; --line:#3a3028;
+  --ink:#e0e0e0; --dim:#9b8f80; --faint:#6e6357;
+  --green:#00ff41; --amber:#ffb347; --red:#ff3b30;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:'Courier New',ui-monospace,monospace;overflow:hidden;
+}
+
+/* video fills the viewport, console floats over it */
+.stage{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;background:#000;z-index:0}
+.stage-overlay{
+  position:fixed;inset:0;z-index:1;display:grid;place-items:center;text-align:center;
+  background:rgba(10,10,10,.85);color:var(--dim);padding:1.5rem;font-size:.9rem;line-height:1.7
+}
+.stage-overlay[hidden]{display:none}
+.stage-overlay b{display:block;color:var(--ink);font-size:1.05rem;margin-bottom:.5rem}
+
+.console{
+  position:fixed;z-index:2;left:1rem;top:1rem;width:min(21rem,calc(100vw - 2rem));
+  background:linear-gradient(var(--panel),var(--panel2));
+  border:1px solid var(--line);border-radius:4px;
+  box-shadow:0 8px 32px rgba(0,0,0,.6);
+}
+.console-bar{
+  display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;
+  border-bottom:1px solid var(--line);background:rgba(0,0,0,.25)
+}
+.title{font-size:.78rem;letter-spacing:.14em;color:var(--dim);font-weight:700}
+.dot{width:.5rem;height:.5rem;border-radius:50%;background:var(--faint);margin-left:auto;flex:none}
+.dot.ok{background:var(--green);box-shadow:0 0 0 3px rgba(0,255,65,.18)}
+.dot.bad{background:var(--red);box-shadow:0 0 0 3px rgba(255,59,48,.18)}
+.collapse{
+  background:none;border:1px solid var(--line);color:var(--dim);width:1.5rem;height:1.5rem;
+  border-radius:2px;cursor:pointer;font-family:inherit;line-height:1;padding:0
+}
+.console-body{padding:.85rem .7rem;display:flex;flex-direction:column;gap:.6rem}
+.console-body[hidden]{display:none}
+
+.label{
+  font-size:.62rem;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)
+}
+.row{display:flex;gap:.6rem;align-items:flex-end}
+.block{display:flex;flex-direction:column;gap:.3rem}
+.block.grow{flex:1}
+
+.power{
+  width:3rem;height:3rem;border-radius:50%;cursor:pointer;
+  background:#3a2b1e;border:1px solid #6b5136;color:var(--amber);font-size:1.4rem;line-height:1;
+}
+.power:hover{background:#4a3626}
+.power.held{background:#1e3a24;border-color:#376b45;color:var(--green)}
+
+.seven{
+  font-size:1.5rem;letter-spacing:.08em;text-align:center;padding:.35rem .5rem;
+  background:#0d0b09;border:1px solid var(--line);border-radius:3px;
+  color:var(--faint);font-variant-numeric:tabular-nums
+}
+.seven.live{color:var(--green)}
+.seven.wait{color:var(--amber)}
+.seven.busy{color:var(--red)}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
+.btn{
+  padding:.55rem .4rem;font-family:inherit;font-size:.72rem;letter-spacing:.06em;
+  background:#2a2320;border:1px solid var(--line);color:var(--ink);border-radius:3px;cursor:pointer;
+}
+.btn:hover:not(:disabled){background:#3a312c}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn:focus-visible,.power:focus-visible,.collapse:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+
+.turnstile{display:flex;justify-content:center}
+.turnstile[hidden]{display:none}
+
+.readout{
+  background:#0d0b09;border:1px solid var(--line);border-radius:3px;padding:.5rem .6rem;
+  font-size:.7rem;line-height:1.6
+}
+.line{color:var(--green);word-break:break-word}
+.sensors{color:var(--dim);margin-top:.3rem;font-size:.66rem}
+
+@media (max-width:520px){
+  .console{left:.5rem;right:.5rem;top:.5rem;width:auto}
+  .stage{object-fit:contain}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
