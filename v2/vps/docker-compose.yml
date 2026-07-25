@@ -43,7 +43,7 @@ services:
       - TZ=Australia/Brisbane
       - URL=chook.cam
       - VALIDATION=http
-      - SUBDOMAINS=www,
+      - SUBDOMAINS=www,video
       - CERTPROVIDER=
       - EMAIL=${SWAG_EMAIL}
       - STAGING=false
@@ -56,22 +56,21 @@ services:
     networks:
       - chook-net
 
-  # MediaMTX - RTSP to HLS converter
+  # MediaMTX - the video relay. The cluster PUSHES to it over SRT; this box
+  # never reaches into the home network. Runs on the bridge (not in the
+  # tailscale netns) so SRT/ICE ports land on the host and swag can reach it
+  # by name. Pinned: :latest previously drifted unnoticed.
   mediamtx:
-    image: bluenviron/mediamtx:latest
+    image: bluenviron/mediamtx:1.19.3
     container_name: mediamtx
-    environment:
-      - MTX_PROTOCOLS=tcp
-      - MTX_RTSPADDRESS=:8554
-      - MTX_HLSADDRESS=:8888
-      - MTX_HLSALLOWORIGIN=*
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
-    network_mode: service:tailscale
+    ports:
+      - "8890:8890/udp"   # SRT ingest from the cluster
+      - "8189:8189/udp"   # WebRTC ICE
     restart: unless-stopped
-    depends_on:
-      tailscale:
-        condition: service_healthy
+    networks:
+      - chook-net
 
   # Chook Server - Main application
   chook-server:

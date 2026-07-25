@@ -3,8 +3,12 @@
 *.env
 !*.env.example
 
-# swag runtime state (certs, keys, fail2ban, logs) - container-generated
-v2/vps/swag-config/
+# swag runtime state (certs, keys, fail2ban, logs) - container-generated.
+# git cannot re-include a file inside an ignored DIRECTORY, so each parent has
+# to be un-ignored step by step for site-confs/ to actually be tracked.
+v2/vps/swag-config/*
+!v2/vps/swag-config/nginx/
+v2/vps/swag-config/nginx/*
 !v2/vps/swag-config/nginx/site-confs/
 vps/swag-config/
 
@@ -18,3 +22,6 @@ vps/config/
 *.log
 *.swp
 .DS_Store
+
+# mediamtx.yml holds the SRT publish passphrase; template is mediamtx.yml.example
+v2/vps/mediamtx.yml
