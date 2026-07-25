@@ -3,7 +3,7 @@ name: Deploy chicky to Balena
 on:
   push:
     paths:
-      - 'chicky/**'
+      - 'v2/chicky/**'
 
 jobs:
   version-and-deploy:
@@ -25,7 +25,7 @@ jobs:
           fleet: ${{ secrets.BALENA_FLEET }}
           environment: balena-cloud.com
           create_tag: true
-          source: chicky
+          source: v2/chicky
           layer_cache: true
           debug: false
 
