@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chook.cam - Live Chicken Cam</title>
+<meta name="description" content="Watch my backyard chickens, drive the camera and dispense treats.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://chook.cam/">
+<meta property="og:title" content="Chook.cam - For the love of chooks!">
+<meta property="og:description" content="Watch my backyard chickens, drive the camera and dispense treats.">
+<meta property="og:image" content="https://chook.cam/static/screenshot-lg.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Chook.cam - For the love of chooks!">
+<meta name="twitter:image" content="https://chook.cam/static/screenshot-lg.png">
+<link rel="icon" type="image/webp" href="/static/favicon.webp">
+<link rel="stylesheet" href="/static/console.css">
+{{if .TurnstileKey}}<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>{{end}}
+</head>
+<body>
+
+<video id="v" class="stage" autoplay muted playsinline></video>
+<div class="stage-overlay" id="ov"><div><b>Connecting to the coop&hellip;</b><span id="ovsub">If the chickens are asleep it will be dark. That is normal.</span></div></div>
+
+<section class="console" id="console">
+  <header class="console-bar">
+    <span class="title">CHOOK CONSOLE</span>
+    <span class="dot" id="coopdot" title="coop controller"></span>
+    <button class="collapse" id="collapse" aria-label="Collapse panel">_</button>
+  </header>
+
+  <div class="console-body" id="body">
+
+    <div class="row">
+      <div class="block">
+        <span class="label">Control</span>
+        <button class="power" id="power" title="Request control">&#9211;</button>
+      </div>
+      <div class="block grow">
+        <span class="label">Status</span>
+        <div class="seven" id="seat">--</div>
+      </div>
+    </div>
+
+    <div id="turnstile-holder" class="turnstile" hidden>
+      {{if .TurnstileKey}}<div class="cf-turnstile" data-sitekey="{{.TurnstileKey}}" data-theme="dark" data-size="flexible"></div>{{end}}
+    </div>
+
+    <span class="label">Camera Positions</span>
+    <div class="grid">
+      {{range .Presets}}
+      <button class="btn ptz" data-preset="{{.Token}}" disabled>{{.Name}}</button>
+      {{end}}
+    </div>
+
+    <span class="label">Auxiliary Systems</span>
+    <div class="grid">
+      <button class="btn aux" id="treat" disabled>&#127807; TREAT</button>
+      <button class="btn aux" id="light" disabled>&#128161; LIGHT</button>
+    </div>
+
+    <div class="readout" id="readout">
+      <div class="line" id="msg">&gt; STANDING BY...</div>
+      <div class="sensors" id="sensors">TEMP: -- &nbsp; HUM: -- &nbsp; PRESS: -- &nbsp; LUX: --</div>
+    </div>
+  </div>
+</section>
+
+<script src="/static/hls.min.js"></script>
+<script>
+(function () {
+  var VIDEO_ORIGIN = {{.VideoOrigin}};
+  var VIDEO_PATH   = {{.VideoPath}};
+  var TURN_SECONDS = {{.TurnSeconds}};
+  var HAS_TURNSTILE = {{if .TurnstileKey}}true{{else}}false{{end}};
+
+  var $ = function (id) { return document.getElementById(id); };
+  var tokenKey = 'chookControlToken';
+  var myToken = sessionStorage.getItem(tokenKey) || '';
+  var settled = false, pc = null, hls = null;
+
+  // ---------- video: WHEP first, HLS fallback ----------
+  var v = $('v'), ov = $('ov');
+  v.addEventListener('playing', function () { settled = true; ov.hidden = true; });
+
+  function startWhep() {
+    pc = new RTCPeerConnection({ iceServers: [] });
+    pc.addTransceiver('video', { direction: 'recvonly' });
+    pc.ontrack = function (e) { v.srcObject = e.streams[0]; };
+    pc.onconnectionstatechange = function () {
+      if (!settled && (pc.connectionState === 'failed' || pc.connectionState === 'disconnected')) startHls();
+    };
+    pc.createOffer()
+      .then(function (o) { return pc.setLocalDescription(o); })
+      .then(function () {
+        return new Promise(function (res) {
+          if (pc.iceGatheringState === 'complete') return res();
+          var t = setTimeout(res, 3000);
+          pc.onicegatheringstatechange = function () {
+            if (pc.iceGatheringState === 'complete') { clearTimeout(t); res(); }
+          };
+        });
+      })
+      .then(function () {
+        return fetch(VIDEO_ORIGIN + '/' + VIDEO_PATH + '/whep', {
+          method: 'POST', headers: { 'Content-Type': 'application/sdp' },
+          body: pc.localDescription.sdp
+        });
+      })
+      .then(function (r) { if (!r.ok) throw new Error('WHEP ' + r.status); return r.text(); })
+      .then(function (sdp) { return pc.setRemoteDescription({ type: 'answer', sdp: sdp }); })
+      .catch(function () { startHls(); });
+    setTimeout(function () { if (!settled) startHls(); }, 9000);
+  }
+
+  function startHls() {
+    if (settled || hls) return;
+    if (pc) { try { pc.close(); } catch (e) {} pc = null; }
+    var url = VIDEO_ORIGIN + '/' + VIDEO_PATH + '/index.m3u8';
+    if (window.Hls && Hls.isSupported()) {
+      hls = new Hls({ lowLatencyMode: false, backBufferLength: 30 });
+      hls.loadSource(url); hls.attachMedia(v);
+      hls.on(Hls.Events.MANIFEST_PARSED, function () { v.play().catch(function () {}); });
+    } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
+      v.src = url; v.play().catch(function () {});
+    } else {
+      $('ovsub').textContent = 'This browser cannot play the stream.';
+    }
+  }
+  startWhep();
+
+  // ---------- console ----------
+  function say(t) { $('msg').textContent = '> ' + t; }
+  function actionsEnabled(on) {
+    var els = document.querySelectorAll('.ptz, .aux');
+    for (var i = 0; i < els.length; i++) els[i].disabled = !on;
+  }
+
+  function post(path, params) {
+    var body = new URLSearchParams(params || {});
+    if (myToken) body.set('token', myToken);
+    return fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); });
+  }
+
+  $('power').addEventListener('click', function () {
+    var params = {};
+    if (HAS_TURNSTILE) {
+      var f = document.querySelector('[name="cf-turnstile-response"]');
+      if (!f || !f.value) {
+        $('turnstile-holder').hidden = false;
+        say('CONFIRM YOU ARE HUMAN, THEN PRESS AGAIN');
+        return;
+      }
+      params['cf-turnstile-response'] = f.value;
+    }
+    say('REQUESTING CONTROL...');
+    post('/api/queue/join', params).then(function (r) {
+      if (!r.ok) { say((r.body.error || 'REFUSED').toUpperCase()); return; }
+      myToken = r.body.token;
+      sessionStorage.setItem(tokenKey, myToken);
+      $('turnstile-holder').hidden = true;
+      say(r.body.driving ? 'YOU HAVE CONTROL' : 'QUEUED, POSITION ' + r.body.position);
+      refresh();
+    });
+  });
+
+  document.querySelectorAll('.ptz').forEach(function (b) {
+    b.addEventListener('click', function () {
+      say('MOVING TO ' + b.textContent.trim().toUpperCase() + '...');
+      post('/api/ptz', { preset: b.dataset.preset }).then(function (r) {
+        say(r.ok ? 'CAMERA MOVING' : (r.body.error || 'FAILED').toUpperCase());
+      });
+    });
+  });
+
+  $('treat').addEventListener('click', function () {
+    say('DISPENSING...');
+    post('/api/treat').then(function (r) {
+      say(r.ok ? 'TREAT DISPENSED' : (r.body.error || 'REFUSED').toUpperCase());
+    });
+  });
+
+  $('light').addEventListener('click', function () {
+    var want = $('light').dataset.on === 'true' ? 'off' : 'on';
+    post('/api/light', { state: want }).then(function (r) {
+      say(r.ok ? 'LIGHT ' + want.toUpperCase() : (r.body.error || 'FAILED').toUpperCase());
+    });
+  });
+
+  $('collapse').addEventListener('click', function () {
+    var b = $('body');
+    b.hidden = !b.hidden;
+    $('collapse').textContent = b.hidden ? '□' : '_';
+  });
+
+  function refresh() {
+    var h = myToken ? { 'X-Control-Token': myToken } : {};
+    fetch('/api/state', { headers: h }).then(function (r) { return r.json(); }).then(function (s) {
+      $('coopdot').className = 'dot ' + (s.coop.online ? 'ok' : 'bad');
+
+      if (s.you.driving) {
+        $('seat').textContent = s.you.seconds_left + 's';
+        $('seat').className = 'seven live';
+        actionsEnabled(true);
+        $('power').classList.add('held');
+      } else {
+        actionsEnabled(false);
+        $('power').classList.remove('held');
+        if (s.you.in_queue && s.you.position > 0) {
+          $('seat').textContent = '#' + s.you.position;
+          $('seat').className = 'seven wait';
+        } else if (s.queue.occupied) {
+          $('seat').textContent = 'BUSY';
+          $('seat').className = 'seven busy';
+        } else {
+          $('seat').textContent = 'FREE';
+          $('seat').className = 'seven';
+        }
+      }
+
+      if (s.coop.has_climate) {
+        var c = s.coop.climate;
+        $('sensors').textContent =
+          'TEMP: ' + c.temperature.toFixed(1) + 'C  HUM: ' + c.humidity.toFixed(0) +
+          '%  PRESS: ' + c.pressure.toFixed(0) + 'hPa  LUX: ' + c.light.toFixed(0);
+      }
+      if (s.coop.light_state) {
+        $('light').dataset.on = (s.coop.light_state === 'ON') ? 'true' : 'false';
+      }
+      if (s.coop.has_status && !s.coop.status.treats_allowed) {
+        $('treat').title = s.coop.status.reason;
+      }
+    }).catch(function () {});
+  }
+
+  refresh();
+  setInterval(refresh, 2000);
+})();
+</script>
+</body>
+</html>
