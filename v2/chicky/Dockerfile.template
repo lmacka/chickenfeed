@@ -23,6 +23,11 @@ RUN pip install --extra-index-url=https://piwheels.org/simple --no-cache-dir pyt
     pip install --extra-index-url=https://piwheels.org/simple --no-cache-dir pimoroni-bme280 ads1x15-adc rpi-lgpio && \
     pip install --extra-index-url=https://piwheels.org/simple --no-cache-dir automationhat==1.0.0 || true
 
+# MQTT bridge + daylight gate. Installed explicitly (not via -r requirements.txt)
+# to match how the hardware deps above are pinned; both are pure Python.
+RUN pip install --extra-index-url=https://piwheels.org/simple --no-cache-dir \
+    paho-mqtt==2.1.0 astral==3.2
+
 # Copy the rest of the application
 COPY . .
 
