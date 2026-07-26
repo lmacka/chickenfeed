@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-import time
-import automationhat
 import logging
+import time
+
+import automationhat
 
 logger = logging.getLogger(__name__)
 

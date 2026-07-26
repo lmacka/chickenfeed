@@ -20,7 +20,8 @@ import json
 import logging
 import os
 import threading
-from datetime import datetime, time as dtime, timedelta
+from datetime import datetime
+from datetime import time as dtime
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +81,7 @@ class SafetyEnvelope:
 
     def _load(self):
         try:
-            with open(STATE_FILE, "r", encoding="utf-8") as fh:
+            with open(STATE_FILE, encoding="utf-8") as fh:
                 data = json.load(fh)
             self._quota_day = data.get("quota_day")
             self._dispense_count = int(data.get("dispense_count", 0))

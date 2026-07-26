@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-import time
 import logging
+import time
+
 import RPi.GPIO as GPIO
 
 logger = logging.getLogger(__name__)

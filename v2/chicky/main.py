@@ -11,13 +11,16 @@ Both go through SafetyEnvelope, so the daylight window, cooldown, daily quota
 and light auto-off hold no matter who is asking. The web app can only request
 a treat; this process decides whether one happens.
 """
-import os
 import logging
-from typing import Dict, Any
+import os
+from typing import Any
 
 import fastapi
-from fastapi import FastAPI, HTTPException
 import uvicorn
+from fastapi import FastAPI, HTTPException
+
+from src.mqtt_bridge import MqttBridge
+from src.safety import SafetyEnvelope
 
 # Configure logging
 logging.basicConfig(
@@ -26,18 +29,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Import existing hardware controllers
+# Hardware imports are probed rather than assumed, so the controller still runs
+# (and still serves the safety envelope) on a machine with no GPIO.
 try:
-    from src.hardware.servo_controller import ServoController
     from src.hardware.relay_controller import RelayController
     from src.hardware.sensor_reader import SensorReader
+    from src.hardware.servo_controller import ServoController
     HARDWARE_AVAILABLE = True
 except ImportError:
     logger.warning("Hardware modules not available - running in mock mode")
     HARDWARE_AVAILABLE = False
-
-from src.safety import SafetyEnvelope
-from src.mqtt_bridge import MqttBridge
 
 # Initialize hardware controllers if available
 if HARDWARE_AVAILABLE:
@@ -101,7 +102,7 @@ async def shutdown_event():
 
 
 @app.get("/health")
-async def health_check() -> Dict[str, Any]:
+async def health_check() -> dict[str, Any]:
     """Health check endpoint for monitoring"""
     return {
         "status": "healthy",
@@ -112,13 +113,13 @@ async def health_check() -> Dict[str, Any]:
 
 
 @app.get("/api/status")
-async def status() -> Dict[str, Any]:
+async def status() -> dict[str, Any]:
     """Current safety-envelope state: quota, cooldown, daylight, light timer."""
     return safety.status()
 
 
 @app.post("/api/treat")
-async def dispense_treat() -> Dict[str, Any]:
+async def dispense_treat() -> dict[str, Any]:
     """Dispense a treat, if the safety envelope allows it."""
     allowed, reason = safety.begin_dispense()
     if not allowed:
@@ -134,13 +135,13 @@ async def dispense_treat() -> Dict[str, Any]:
         return {"success": True, "message": "Treat dispensed", "status": safety.status()}
     except Exception as e:
         logger.error(f"Error dispensing treat: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         safety.end_dispense(ok)
 
 
 @app.post("/api/light")
-async def toggle_light() -> Dict[str, Any]:
+async def toggle_light() -> dict[str, Any]:
     """Toggle the coop light. Turning it on always arms the auto-off timer."""
     try:
         if HARDWARE_AVAILABLE and relay:
@@ -162,11 +163,11 @@ async def toggle_light() -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Error toggling light: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/api/sensors")
-async def get_sensor_readings() -> Dict[str, Any]:
+async def get_sensor_readings() -> dict[str, Any]:
     """Get current sensor readings"""
     units = {
         "temperature": "°C",
