@@ -19,7 +19,7 @@ jobs:
       run:
         working-directory: v2/app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version-file: v2/app/go.mod
@@ -38,7 +38,7 @@ jobs:
       run:
         working-directory: v2/app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Deliberately NOT go-version-file. govulncheck@latest tracks the current
       # Go release and refuses to install on an older toolchain, which failed
       # the build for a reason that had nothing to do with the code. It analyses
@@ -58,7 +58,7 @@ jobs:
       run:
         working-directory: v2/chicky
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -85,7 +85,7 @@ jobs:
     name: Secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
