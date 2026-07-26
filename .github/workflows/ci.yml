@@ -20,7 +20,7 @@ jobs:
         working-directory: v2/app
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: v2/app/go.mod
           cache-dependency-path: v2/app/go.sum
@@ -43,7 +43,7 @@ jobs:
       # Go release and refuses to install on an older toolchain, which failed
       # the build for a reason that had nothing to do with the code. It analyses
       # the module regardless of the toolchain running it.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
           cache-dependency-path: v2/app/go.sum
