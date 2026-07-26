@@ -1,93 +1,99 @@
-/* Chook console.
-   Keeps the identity of the retired UI: floating terminal panel over a
-   full-bleed coop feed, phosphor green on near-black, seven-segment readout. */
+/* Chook.cam.
+   The stream is the page. Controls are a gimmick and behave like normal video
+   player chrome: a slim dock that fades when idle and returns on any input.
+   Retro-terminal palette kept from the original console. */
 :root{
-  --bg:#0a0a0a; --panel:#1c1713; --panel2:#241d17; --line:#3a3028;
-  --ink:#e0e0e0; --dim:#9b8f80; --faint:#6e6357;
-  --green:#00ff41; --amber:#ffb347; --red:#ff3b30;
+  --bg:#0a0a0a; --panel:rgba(24,19,14,.92); --line:#3a3028;
+  --ink:#ece0cc; --dim:#a8977e; --faint:#7b6c58;
+  --green:#5fe07d; --amber:#ffb347; --red:#ff6a4d;
+  --mono:'Courier New',ui-monospace,monospace;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
-body{
-  margin:0;background:var(--bg);color:var(--ink);
-  font-family:'Courier New',ui-monospace,monospace;overflow:hidden;
-}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);overflow:hidden}
 
-/* video fills the viewport, console floats over it */
+/* ---------- stream ---------- */
 .stage{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;background:#000;z-index:0}
 .stage-overlay{
-  position:fixed;inset:0;z-index:1;display:grid;place-items:center;text-align:center;
-  background:rgba(10,10,10,.85);color:var(--dim);padding:1.5rem;font-size:.9rem;line-height:1.7
+  position:fixed;inset:0;z-index:3;display:grid;place-items:center;text-align:center;
+  background:rgba(10,10,10,.88);color:var(--dim);padding:1.5rem;font-size:.9rem;line-height:1.7
 }
 .stage-overlay[hidden]{display:none}
 .stage-overlay b{display:block;color:var(--ink);font-size:1.05rem;margin-bottom:.5rem}
 
-.console{
-  position:fixed;z-index:2;left:1rem;top:1rem;width:min(21rem,calc(100vw - 2rem));
-  background:linear-gradient(var(--panel),var(--panel2));
-  border:1px solid var(--line);border-radius:4px;
-  box-shadow:0 8px 32px rgba(0,0,0,.6);
+/* ---------- always-visible status pill ---------- */
+.pill{
+  position:fixed;z-index:2;top:.85rem;left:.85rem;
+  display:flex;align-items:center;gap:.5rem;
+  padding:.32rem .6rem;border-radius:999px;
+  background:rgba(10,10,10,.55);border:1px solid rgba(255,255,255,.09);
+  font-size:.68rem;letter-spacing:.09em;color:var(--dim);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  transition:opacity .35s;
 }
-.console-bar{
-  display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;
-  border-bottom:1px solid var(--line);background:rgba(0,0,0,.25)
-}
-.title{font-size:.78rem;letter-spacing:.14em;color:var(--dim);font-weight:700}
-.dot{width:.5rem;height:.5rem;border-radius:50%;background:var(--faint);margin-left:auto;flex:none}
-.dot.ok{background:var(--green);box-shadow:0 0 0 3px rgba(0,255,65,.18)}
-.dot.bad{background:var(--red);box-shadow:0 0 0 3px rgba(255,59,48,.18)}
-.collapse{
-  background:none;border:1px solid var(--line);color:var(--dim);width:1.5rem;height:1.5rem;
-  border-radius:2px;cursor:pointer;font-family:inherit;line-height:1;padding:0
-}
-.console-body{padding:.85rem .7rem;display:flex;flex-direction:column;gap:.6rem}
-.console-body[hidden]{display:none}
+.pill .dot{width:.42rem;height:.42rem;border-radius:50%;background:var(--faint);flex:none}
+.pill .dot.ok{background:var(--green);box-shadow:0 0 0 3px rgba(95,224,125,.18)}
+.pill .dot.bad{background:var(--red);box-shadow:0 0 0 3px rgba(255,106,77,.18)}
+.pill .sep{color:var(--faint);opacity:.5}
+.pill a{color:var(--faint);text-decoration:none}
+.pill a:hover{color:var(--amber)}
 
-.label{
-  font-size:.62rem;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)
+/* ---------- the dock ---------- */
+.dock{
+  position:fixed;z-index:4;left:50%;bottom:1rem;transform:translateX(-50%);
+  width:min(46rem,calc(100vw - 1.5rem));
+  background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  box-shadow:0 10px 40px rgba(0,0,0,.55);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  padding:.6rem .7rem;
+  display:flex;flex-direction:column;gap:.5rem;
+  transition:opacity .35s, transform .35s;
 }
-.row{display:flex;gap:.6rem;align-items:flex-end}
-.block{display:flex;flex-direction:column;gap:.3rem}
-.block.grow{flex:1}
+/* Idle: fade the dock out, but never while the visitor holds the console. */
+.dock.idle{opacity:0;transform:translateX(-50%) translateY(.6rem);pointer-events:none}
+.pill.idle{opacity:.45}
 
-.power{
-  width:3rem;height:3rem;border-radius:50%;cursor:pointer;
-  background:#3a2b1e;border:1px solid #6b5136;color:var(--amber);font-size:1.4rem;line-height:1;
-}
-.power:hover{background:#4a3626}
-.power.held{background:#1e3a24;border-color:#376b45;color:var(--green)}
+.dockrow{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+.spacer{flex:1}
 
-.seven{
-  font-size:1.5rem;letter-spacing:.08em;text-align:center;padding:.35rem .5rem;
-  background:#0d0b09;border:1px solid var(--line);border-radius:3px;
-  color:var(--faint);font-variant-numeric:tabular-nums
-}
-.seven.live{color:var(--green)}
-.seven.wait{color:var(--amber)}
-.seven.busy{color:var(--red)}
-
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
 .btn{
-  padding:.55rem .4rem;font-family:inherit;font-size:.72rem;letter-spacing:.06em;
-  background:#2a2320;border:1px solid var(--line);color:var(--ink);border-radius:3px;cursor:pointer;
+  padding:.5rem .7rem;font-family:inherit;font-size:.72rem;letter-spacing:.05em;
+  background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--ink);
+  border-radius:5px;cursor:pointer;white-space:nowrap;transition:background .15s;
 }
-.btn:hover:not(:disabled){background:#3a312c}
-.btn:disabled{opacity:.35;cursor:not-allowed}
-.btn:focus-visible,.power:focus-visible,.collapse:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.btn:hover:not(:disabled){background:rgba(255,255,255,.12)}
+.btn:disabled{opacity:.3;cursor:not-allowed}
+.btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.btn.aux{border-color:#5a4a34}
+.btn.on{border-color:var(--amber);color:var(--amber)}
 
+.seat{
+  font-size:.68rem;letter-spacing:.1em;color:var(--faint);
+  padding:.3rem .55rem;border:1px solid transparent;border-radius:5px;white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+.seat.live{color:var(--green);border-color:rgba(95,224,125,.35);background:rgba(95,224,125,.07)}
+.seat.wait{color:var(--amber);border-color:rgba(255,179,71,.3)}
+.seat.busy{color:var(--red);border-color:rgba(255,106,77,.25)}
+
+.msg{
+  font-size:.68rem;color:var(--green);min-height:1em;letter-spacing:.04em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.msg.warn{color:var(--amber)}
+.msg.err{color:var(--red)}
+.msg:empty{display:none}
+
+/* Turnstile only becomes visible if Cloudflare actually challenges. */
 .turnstile{display:flex;justify-content:center}
-.turnstile[hidden]{display:none}
+.turnstile:empty,.turnstile[hidden]{display:none}
 
-.readout{
-  background:#0d0b09;border:1px solid var(--line);border-radius:3px;padding:.5rem .6rem;
-  font-size:.7rem;line-height:1.6
-}
-.line{color:var(--green);word-break:break-word}
-.sensors{color:var(--dim);margin-top:.3rem;font-size:.66rem}
-
-@media (max-width:520px){
-  .console{left:.5rem;right:.5rem;top:.5rem;width:auto}
+@media (max-width:640px){
   .stage{object-fit:contain}
+  .dock{left:.5rem;right:.5rem;bottom:.5rem;transform:none;width:auto}
+  .dock.idle{transform:translateY(.6rem)}
+  .btn{flex:1;text-align:center;padding:.55rem .4rem}
+  .pill{font-size:.62rem}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}

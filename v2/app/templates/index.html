@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Chook.cam - Live Chicken Cam</title>
-<meta name="description" content="Watch my backyard chickens, drive the camera and dispense treats.">
+<meta name="description" content="Watch my backyard chickens live. Drive the camera and dispense treats.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://chook.cam/">
 <meta property="og:title" content="Chook.cam - For the love of chooks!">
-<meta property="og:description" content="Watch my backyard chickens, drive the camera and dispense treats.">
+<meta property="og:description" content="Watch my backyard chickens live. Drive the camera and dispense treats.">
 <meta property="og:image" content="https://chook.cam/static/screenshot-lg.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Chook.cam - For the love of chooks!">
@@ -20,74 +20,57 @@
 <body>
 
 <video id="v" class="stage" autoplay muted playsinline></video>
-<div class="stage-overlay" id="ov"><div><b>Connecting to the coop&hellip;</b><span id="ovsub">If the chickens are asleep it will be dark. That is normal.</span></div></div>
 
-<section class="console" id="console">
-  <header class="console-bar">
-    <span class="title">CHOOK CONSOLE</span>
-    <span class="dot" id="coopdot" title="coop controller"></span>
-    <button class="collapse" id="collapse" aria-label="Collapse panel">_</button>
-  </header>
+<div class="stage-overlay" id="ov">
+  <div><b>Connecting to the coop&hellip;</b><span id="ovsub">If the chickens are asleep it will be dark. That is normal.</span></div>
+</div>
 
-  <div class="console-body" id="body">
+<!-- Always visible, never fades fully: the reading people actually want. -->
+<div class="pill" id="pill">
+  <span class="dot" id="coopdot"></span>
+  <span id="pilltext">connecting</span>
+  <span class="sep">&middot;</span>
+  <a href="https://github.com/lmacka/chickenfeed" target="_blank" rel="noopener">github</a>
+</div>
 
-    <div class="row">
-      <div class="block">
-        <span class="label">Control</span>
-        <button class="power" id="power" title="Request control">&#9211;</button>
-      </div>
-      <div class="block grow">
-        <span class="label">Status</span>
-        <div class="seven" id="seat">--</div>
-      </div>
-    </div>
-
-    <!-- Turnstile gates entry to the control queue, once per visitor. It is not
-         on the treat/light/PTZ buttons: those already require the seat token
-         that a verified join issues, so re-challenging per press would add
-         friction without adding a gate. -->
-    <div id="turnstile-holder" class="turnstile" hidden>
-      {{if .TurnstileKey}}<div class="cf-turnstile"
-           data-sitekey="{{.TurnstileKey}}"
-           data-action="turnstile-spin-v2"
-           data-theme="dark"
-           data-size="flexible"></div>{{end}}
-    </div>
-
-    <span class="label">Camera Positions</span>
-    <div class="grid">
-      {{range .Presets}}
-      <button class="btn ptz" data-preset="{{.Token}}" disabled>{{.Name}}</button>
-      {{end}}
-    </div>
-
-    <span class="label">Auxiliary Systems</span>
-    <div class="grid">
-      <button class="btn aux" id="treat" disabled>&#127807; TREAT</button>
-      <button class="btn aux" id="light" disabled>&#128161; LIGHT</button>
-    </div>
-
-    <div class="readout" id="readout">
-      <div class="line" id="msg">&gt; STANDING BY...</div>
-      <div class="sensors" id="sensors">TEMP: -- &nbsp; HUM: -- &nbsp; PRESS: -- &nbsp; LUX: --</div>
-    </div>
+<!-- Player chrome. Fades when idle, returns on any input, and stays put while
+     the visitor holds the console so a turn is never lost to a fade. -->
+<div class="dock" id="dock">
+  <div class="dockrow">
+    {{range .Presets}}
+    <button class="btn ptz" data-preset="{{.Token}}">{{.Name}}</button>
+    {{end}}
+    <span class="spacer"></span>
+    <button class="btn aux" id="treat">&#127807; Treat</button>
+    <button class="btn aux" id="light">&#128161; Light</button>
+    <span class="seat" id="seat"></span>
   </div>
-</section>
+  <div class="msg" id="msg"></div>
+  <!-- Managed widget: renders invisibly and only shows if Cloudflare decides to
+       challenge. Solving happens on load so the first control press is instant. -->
+  <div class="turnstile" id="turnstile-holder">
+    {{if .TurnstileKey}}<div class="cf-turnstile"
+         data-sitekey="{{.TurnstileKey}}"
+         data-action="turnstile-spin-v2"
+         data-theme="dark"
+         data-size="flexible"></div>{{end}}
+  </div>
+</div>
 
 <script src="/static/hls.min.js"></script>
 <script>
 (function () {
-  var VIDEO_ORIGIN = {{.VideoOrigin}};
-  var VIDEO_PATH   = {{.VideoPath}};
-  var TURN_SECONDS = {{.TurnSeconds}};
+  var VIDEO_ORIGIN  = {{.VideoOrigin}};
+  var VIDEO_PATH    = {{.VideoPath}};
   var HAS_TURNSTILE = {{if .TurnstileKey}}true{{else}}false{{end}};
 
   var $ = function (id) { return document.getElementById(id); };
   var tokenKey = 'chookControlToken';
   var myToken = sessionStorage.getItem(tokenKey) || '';
   var settled = false, pc = null, hls = null;
+  var driving = false, busy = false;
 
-  // ---------- video: WHEP first, HLS fallback ----------
+  // ---------- stream: WHEP first, HLS fallback ----------
   var v = $('v'), ov = $('ov');
   v.addEventListener('playing', function () { settled = true; ov.hidden = true; });
 
@@ -137,11 +120,31 @@
   }
   startWhep();
 
+  // ---------- chrome auto-hide ----------
+  var dock = $('dock'), pill = $('pill'), idleTimer = null;
+  function wake() {
+    dock.classList.remove('idle'); pill.classList.remove('idle');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(function () {
+      // Never fade while the visitor holds the console, or while a challenge
+      // is on screen: losing either to a timeout would feel broken.
+      if (driving || $('turnstile-holder').offsetHeight > 0) return;
+      if (dock.matches(':hover') || dock.contains(document.activeElement)) return;
+      dock.classList.add('idle'); pill.classList.add('idle');
+    }, 3500);
+  }
+  ['mousemove','mousedown','touchstart','keydown','wheel'].forEach(function (e) {
+    window.addEventListener(e, wake, { passive: true });
+  });
+  dock.addEventListener('mouseenter', wake);
+  wake();
+
   // ---------- console ----------
-  function say(t) { $('msg').textContent = '> ' + t; }
-  function actionsEnabled(on) {
-    var els = document.querySelectorAll('.ptz, .aux');
-    for (var i = 0; i < els.length; i++) els[i].disabled = !on;
+  function say(t, cls) {
+    var m = $('msg');
+    m.textContent = t || '';
+    m.className = 'msg' + (cls ? ' ' + cls : '');
+    wake();
   }
 
   function post(path, params) {
@@ -154,94 +157,122 @@
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); });
   }
 
-  $('power').addEventListener('click', function () {
+  // Turnstile tokens are SINGLE USE and expire after 300s. Reset after every
+  // attempt, or the next press replays a spent token, siteverify returns
+  // timeout-or-duplicate, and the visitor is locked out until they reload.
+  function resetTurnstile() {
+    if (window.turnstile) { try { window.turnstile.reset(); } catch (e) {} }
+  }
+  function turnstileToken() {
+    var f = document.querySelector('[name="cf-turnstile-response"]');
+    return f ? f.value : '';
+  }
+
+  // No explicit "request control" step. The seat is claimed implicitly on the
+  // first control press, so the queue only ever surfaces during contention.
+  function ensureSeat() {
+    if (driving) return Promise.resolve(true);
     var params = {};
     if (HAS_TURNSTILE) {
-      var f = document.querySelector('[name="cf-turnstile-response"]');
-      if (!f || !f.value) {
+      var t = turnstileToken();
+      if (!t) {
         $('turnstile-holder').hidden = false;
-        say('CONFIRM YOU ARE HUMAN, THEN PRESS AGAIN');
-        return;
+        say('confirm you are human, then press again', 'warn');
+        return Promise.resolve(false);
       }
-      params['cf-turnstile-response'] = f.value;
+      params['cf-turnstile-response'] = t;
     }
-    say('REQUESTING CONTROL...');
-    post('/api/queue/join', params).then(function (r) {
-      if (!r.ok) { say((r.body.error || 'REFUSED').toUpperCase()); return; }
+    say('taking the console...');
+    return post('/api/queue/join', params).then(function (r) {
+      resetTurnstile();
+      if (!r.ok) {
+        say((r.body.error || 'refused').toLowerCase(), 'err');
+        $('turnstile-holder').hidden = false;
+        return false;
+      }
       myToken = r.body.token;
       sessionStorage.setItem(tokenKey, myToken);
       $('turnstile-holder').hidden = true;
-      say(r.body.driving ? 'YOU HAVE CONTROL' : 'QUEUED, POSITION ' + r.body.position);
-      refresh();
+      if (r.body.driving) { driving = true; return true; }
+      say('someone else is driving. you are #' + r.body.position + ' in line', 'warn');
+      return false;
     });
-  });
+  }
 
-  document.querySelectorAll('.ptz').forEach(function (b) {
+  function act(label, fn) {
+    if (busy) return;
+    busy = true;
+    ensureSeat().then(function (ok) {
+      if (!ok) { busy = false; refresh(); return; }
+      say(label + '...');
+      return fn().then(function (r) {
+        say(r.ok ? label + ' ok' : (r.body.error || 'failed').toLowerCase(), r.ok ? null : 'err');
+        busy = false;
+        refresh();
+      });
+    }).catch(function () { busy = false; });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.ptz'), function (b) {
     b.addEventListener('click', function () {
-      say('MOVING TO ' + b.textContent.trim().toUpperCase() + '...');
-      post('/api/ptz', { preset: b.dataset.preset }).then(function (r) {
-        say(r.ok ? 'CAMERA MOVING' : (r.body.error || 'FAILED').toUpperCase());
+      act(b.textContent.trim().toLowerCase(), function () {
+        return post('/api/ptz', { preset: b.dataset.preset });
       });
     });
   });
 
   $('treat').addEventListener('click', function () {
-    say('DISPENSING...');
-    post('/api/treat').then(function (r) {
-      say(r.ok ? 'TREAT DISPENSED' : (r.body.error || 'REFUSED').toUpperCase());
-    });
+    act('treat', function () { return post('/api/treat'); });
   });
 
   $('light').addEventListener('click', function () {
-    var want = $('light').dataset.on === 'true' ? 'off' : 'on';
-    post('/api/light', { state: want }).then(function (r) {
-      say(r.ok ? 'LIGHT ' + want.toUpperCase() : (r.body.error || 'FAILED').toUpperCase());
-    });
+    var want = $('light').classList.contains('on') ? 'off' : 'on';
+    act('light ' + want, function () { return post('/api/light', { state: want }); });
   });
 
-  $('collapse').addEventListener('click', function () {
-    var b = $('body');
-    b.hidden = !b.hidden;
-    $('collapse').textContent = b.hidden ? '□' : '_';
-  });
-
+  // ---------- state ----------
   function refresh() {
     var h = myToken ? { 'X-Control-Token': myToken } : {};
     fetch('/api/state', { headers: h }).then(function (r) { return r.json(); }).then(function (s) {
       $('coopdot').className = 'dot ' + (s.coop.online ? 'ok' : 'bad');
 
-      if (s.you.driving) {
-        $('seat').textContent = s.you.seconds_left + 's';
-        $('seat').className = 'seven live';
-        actionsEnabled(true);
-        $('power').classList.add('held');
+      var bits = [];
+      if (s.coop.has_climate) {
+        bits.push(s.coop.climate.temperature.toFixed(1) + 'C');
+        bits.push(s.coop.climate.humidity.toFixed(0) + '%');
+      }
+      $('pilltext').textContent = s.coop.online ? (bits.join('  ') || 'live') : 'coop offline';
+
+      var wasDriving = driving;
+      driving = s.you.driving;
+
+      if (driving) {
+        $('seat').textContent = 'yours ' + s.you.seconds_left + 's';
+        $('seat').className = 'seat live';
+        wake();
       } else {
-        actionsEnabled(false);
-        $('power').classList.remove('held');
+        if (wasDriving) {
+          // Turn ended. Drop the spent token: keeping it would make the next
+          // press fail our own cooldown check for a seat we no longer hold.
+          myToken = '';
+          sessionStorage.removeItem(tokenKey);
+          say('turn over, press anything to queue again', 'warn');
+        }
         if (s.you.in_queue && s.you.position > 0) {
-          $('seat').textContent = '#' + s.you.position;
-          $('seat').className = 'seven wait';
+          $('seat').textContent = '#' + s.you.position + ' in line';
+          $('seat').className = 'seat wait';
         } else if (s.queue.occupied) {
-          $('seat').textContent = 'BUSY';
-          $('seat').className = 'seven busy';
+          $('seat').textContent = 'in use ' + s.queue.seconds_left + 's';
+          $('seat').className = 'seat busy';
         } else {
-          $('seat').textContent = 'FREE';
-          $('seat').className = 'seven';
+          $('seat').textContent = '';
+          $('seat').className = 'seat';
         }
       }
 
-      if (s.coop.has_climate) {
-        var c = s.coop.climate;
-        $('sensors').textContent =
-          'TEMP: ' + c.temperature.toFixed(1) + 'C  HUM: ' + c.humidity.toFixed(0) +
-          '%  PRESS: ' + c.pressure.toFixed(0) + 'hPa  LUX: ' + c.light.toFixed(0);
-      }
-      if (s.coop.light_state) {
-        $('light').dataset.on = (s.coop.light_state === 'ON') ? 'true' : 'false';
-      }
-      if (s.coop.has_status && !s.coop.status.treats_allowed) {
-        $('treat').title = s.coop.status.reason;
-      }
+      $('light').classList.toggle('on', s.coop.light_state === 'ON');
+      $('treat').disabled = s.coop.has_status && !s.coop.status.treats_allowed;
+      $('treat').title = ($('treat').disabled && s.coop.status.reason) || 'Dispense a treat';
     }).catch(function () {});
   }
 
