@@ -30,8 +30,24 @@ jobs:
           git diff --exit-code -- go.mod go.sum
       - run: go vet ./...
       - run: go build ./...
-      - name: govulncheck
-        run: |
+
+  vuln:
+    name: chook-app (govulncheck)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v2/app
+    steps:
+      - uses: actions/checkout@v4
+      # Deliberately NOT go-version-file. govulncheck@latest tracks the current
+      # Go release and refuses to install on an older toolchain, which failed
+      # the build for a reason that had nothing to do with the code. It analyses
+      # the module regardless of the toolchain running it.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: v2/app/go.sum
+      - run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
