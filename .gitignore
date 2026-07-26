@@ -25,3 +25,9 @@ vps/config/
 
 # mediamtx.yml holds the SRT publish passphrase; template is mediamtx.yml.example
 v2/vps/mediamtx.yml
+
+# compiled output. The retired chook-server binary was committed once at 16 MB;
+# build artefacts do not belong in the repo.
+v2/app/chook-app
+*.exe
+*.bin

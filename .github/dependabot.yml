@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /v2/app
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+  - package-ecosystem: pip
+    directory: /v2/chicky
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+  - package-ecosystem: docker
+    directory: /v2/chicky
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /v2/vps
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }

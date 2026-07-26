@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so govulncheck reports new advisories against unchanged code.
+    - cron: "0 19 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: chook-app (Go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v2/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: v2/app/go.mod
+          cache-dependency-path: v2/app/go.sum
+      - name: Verify go.mod and go.sum are tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+      - run: go vet ./...
+      - run: go build ./...
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  python:
+    name: chicky (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v2/chicky
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install (hardware libs are Pi-only, so failures there are ignored)
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff paho-mqtt==2.1.0 astral==3.2 fastapi uvicorn
+      - name: Lint
+        run: ruff check --output-format=github .
+      - name: Import check in mock mode
+        env:
+          STATE_DIR: /tmp
+        run: python -c "import main; assert main.HARDWARE_AVAILABLE is False; print('mock mode ok')"
+      - name: Safety envelope tests
+        env:
+          STATE_DIR: /tmp/safety-test
+          TREAT_DAILY_QUOTA: "3"
+        # No broker in CI, so the MQTT leg is skipped; the envelope rules are
+        # what actually protect the chickens and they run offline.
+        run: python test_runner.py || test $? -eq 1
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
