@@ -13,16 +13,17 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Chook.cam - For the love of chooks!">
 <meta name="twitter:image" content="https://chook.cam/static/screenshot-lg.png">
-<link rel="icon" type="image/webp" href="/static/favicon.webp">
-<link rel="stylesheet" href="/static/console.css">
+<link rel="icon" type="image/webp" href="/static/favicon.webp?v={{.AssetVersion}}">
+<link rel="stylesheet" href="/static/console.css?v={{.AssetVersion}}">
 {{if .TurnstileKey}}<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>{{end}}
 </head>
 <body>
 
-<video id="v" class="stage" autoplay muted playsinline></video>
-
-<div class="stage-overlay" id="ov">
-  <div><b>Connecting to the coop&hellip;</b><span id="ovsub">If the chickens are asleep it will be dark. That is normal.</span></div>
+<div class="player" id="player">
+  <video id="v" class="stage" autoplay muted playsinline></video>
+  <div class="stage-overlay" id="ov">
+    <div><b>Connecting to the coop&hellip;</b><span id="ovsub">If the chickens are asleep it will be dark. That is normal.</span></div>
+  </div>
 </div>
 
 <!-- Always visible, never fades fully: the reading people actually want. -->
@@ -43,6 +44,7 @@
     <span class="spacer"></span>
     <button class="btn aux" id="treat">&#127807; Treat</button>
     <button class="btn aux" id="light">&#128161; Light</button>
+    <button class="btn aux" id="fs" title="Fullscreen">&#9974;</button>
     <span class="seat" id="seat"></span>
   </div>
   <div class="msg" id="msg"></div>
@@ -57,7 +59,7 @@
   </div>
 </div>
 
-<script src="/static/hls.min.js"></script>
+<script src="/static/hls.min.js?v={{.AssetVersion}}"></script>
 <script>
 (function () {
   var VIDEO_ORIGIN  = {{.VideoOrigin}};
@@ -120,11 +122,35 @@
   }
   startWhep();
 
+  // ---------- fullscreen ----------
+  // On a phone this is the difference between a letterboxed strip and a usable
+  // picture, so the video itself is tappable too, not just the button.
+  function toggleFullscreen() {
+    var el = $('player');
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      return;
+    }
+    var req = el.requestFullscreen || el.webkitRequestFullscreen || v.webkitEnterFullscreen;
+    if (!req) return;
+    var p = req.call(req === v.webkitEnterFullscreen ? v : el);
+    // Best effort: landscape is what makes a 16:9 stream worth fullscreening.
+    if (p && p.then && screen.orientation && screen.orientation.lock) {
+      p.then(function () { screen.orientation.lock('landscape').catch(function () {}); })
+       .catch(function () {});
+    }
+  }
+  $('fs').addEventListener('click', toggleFullscreen);
+  v.addEventListener('dblclick', toggleFullscreen);
+  // Single tap on touch devices, where dblclick is awkward.
+  v.addEventListener('touchend', function (e) { e.preventDefault(); toggleFullscreen(); }, { passive: false });
+
   // ---------- chrome auto-hide ----------
   var dock = $('dock'), pill = $('pill'), idleTimer = null;
   function wake() {
     dock.classList.remove('idle'); pill.classList.remove('idle');
     clearTimeout(idleTimer);
+    if (window.matchMedia('(orientation: portrait)').matches) return;
     idleTimer = setTimeout(function () {
       // Never fade while the visitor holds the console, or while a challenge
       // is on screen: losing either to a timeout would feel broken.

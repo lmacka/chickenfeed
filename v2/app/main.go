@@ -46,6 +46,7 @@ type App struct {
 	turnstileKey string
 	presets      []Preset
 	trustProxy   bool
+	assetVersion string
 }
 
 type Preset struct {
@@ -104,6 +105,10 @@ func main() {
 		videoPath:    env("VIDEO_PATH", "coop"),
 		turnstileKey: os.Getenv("TURNSTILE_SITEKEY"),
 		trustProxy:   env("TRUST_PROXY", "true") == "true",
+		// Cache busting. Cloudflare caches /static/ under its own default TTL
+		// (4h for CSS), so without a version in the URL a deploy ships new HTML
+		// against stale CSS and the layout silently does not change.
+		assetVersion: env("APP_VERSION", strconv.FormatInt(time.Now().Unix(), 10)),
 		presets: []Preset{
 			{Token: "1", Name: env("PRESET_1_NAME", "Viewpoint 1"), Icon: "1"},
 			{Token: "2", Name: env("PRESET_2_NAME", "Viewpoint 2"), Icon: "2"},
@@ -158,8 +163,17 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", app.handleIndex)
-	mux.Handle("/static/", http.StripPrefix("/static/",
-		http.FileServer(http.Dir(env("STATIC_PATH", "static")))))
+	// Assets are addressed with ?v=<version>, so they can be cached hard and
+	// forever: a new build changes the URL rather than waiting out a TTL.
+	staticFS := http.StripPrefix("/static/", http.FileServer(http.Dir(env("STATIC_PATH", "static"))))
+	mux.Handle("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("v") != "" {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "public, max-age=300")
+		}
+		staticFS.ServeHTTP(w, r)
+	}))
 	mux.HandleFunc("/healthz", app.handleHealth)
 	mux.Handle("/metrics", promhttp.Handler())
 
@@ -247,6 +261,7 @@ type pageData struct {
 	TurnstileKey string
 	Presets      []Preset
 	TurnSeconds  int
+	AssetVersion string
 }
 
 func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -255,6 +270,8 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// The page must never be cached: it carries the asset version.
+	w.Header().Set("Cache-Control", "no-cache")
 	// html/template escapes by default. The retired server built HTML with
 	// fmt.Fprintf and shipped stored XSS; this must stay a template.
 	if err := a.tmpl.Execute(w, pageData{
@@ -263,6 +280,7 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 		TurnstileKey: a.turnstileKey,
 		Presets:      a.presets,
 		TurnSeconds:  int(a.queue.turn.Seconds()),
+		AssetVersion: a.assetVersion,
 	}); err != nil {
 		log.Printf("template: %v", err)
 	}

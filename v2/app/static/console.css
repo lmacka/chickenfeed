@@ -13,10 +13,17 @@
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);overflow:hidden}
 
-/* ---------- stream ---------- */
-.stage{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;background:#000;z-index:0}
+/* ---------- stream ----------
+   Landscape/desktop: the player is a fixed full-screen layer and the video
+   fills it. Portrait: it becomes a normal flow block at the top, sized to the
+   stream's own 16:9. Stretching a 16:9 stream to a tall viewport gives either
+   a thin letterboxed strip (contain) or a heavily cropped vertical slice
+   (cover); neither is watchable, so in portrait the video is simply as wide as
+   the screen and the controls sit under it. */
+.player{position:fixed;inset:0;z-index:0;background:#000}
+.stage{width:100%;height:100%;object-fit:cover;background:#000;display:block}
 .stage-overlay{
-  position:fixed;inset:0;z-index:3;display:grid;place-items:center;text-align:center;
+  position:absolute;inset:0;z-index:3;display:grid;place-items:center;text-align:center;
   background:rgba(10,10,10,.88);color:var(--dim);padding:1.5rem;font-size:.9rem;line-height:1.7
 }
 .stage-overlay[hidden]{display:none}
@@ -89,11 +96,38 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);over
 .turnstile{display:flex;justify-content:center}
 .turnstile:empty,.turnstile[hidden]{display:none}
 
-@media (max-width:640px){
+/* Portrait: stack. Video at natural aspect, controls directly beneath it,
+   nothing floating over a mostly-black screen. Auto-hide is disabled here in
+   JS too: there is spare room, so hiding the dock only makes it hard to find. */
+@media (orientation:portrait){
+  html,body{height:auto;overflow-y:auto}
+  body{min-height:100dvh;display:flex;flex-direction:column}
+  .player{position:relative;inset:auto;width:100%;aspect-ratio:16/9;margin-top:2.6rem}
   .stage{object-fit:contain}
-  .dock{left:.5rem;right:.5rem;bottom:.5rem;transform:none;width:auto}
-  .dock.idle{transform:translateY(.6rem)}
-  .btn{flex:1;text-align:center;padding:.55rem .4rem}
-  .pill{font-size:.62rem}
+  .dock{
+    position:relative;left:auto;bottom:auto;transform:none;
+    width:calc(100% - 1rem);margin:.6rem auto;
+  }
+  /* Never fade in portrait, even if the class lands. */
+  .dock.idle{opacity:1;transform:none;pointer-events:auto}
+  .pill.idle{opacity:1}
+  .dockrow{gap:.35rem}
+  .btn{flex:1 1 auto;min-width:5.5rem;text-align:center;padding:.6rem .4rem}
+  .seat{width:100%;text-align:center}
 }
+
+/* Small landscape phones: keep the overlay layout but tighten the dock. */
+@media (orientation:landscape) and (max-height:520px){
+  .dock{bottom:.4rem;padding:.4rem .5rem;gap:.35rem}
+  .btn{padding:.4rem .5rem;font-size:.66rem}
+  .msg{font-size:.62rem}
+}
+
+@media (max-width:640px){
+  .pill{font-size:.62rem;top:.6rem;left:.6rem}
+}
+
+/* Fullscreen: the player is the only thing on screen, so let it fill. */
+.player:fullscreen .stage,
+.player:-webkit-full-screen .stage{object-fit:contain;width:100%;height:100%}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
