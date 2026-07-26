@@ -2,281 +2,114 @@
 
 ## 🐔 Interactive Chicken Coop Livestream
 
-[![Screenshot](docs/screenshot.png)](https://chook.cam)
+[![Live](https://img.shields.io/badge/live-chook.cam-ff9966?style=for-the-badge&logo=internetexplorer&logoColor=white)](https://chook.cam)
+[![Related](https://img.shields.io/badge/related-coopi_(coop_door)-b3e6b3?style=for-the-badge&logo=github&logoColor=black)](https://github.com/lmacka/coopi)
 
+![Go](https://img.shields.io/badge/Go-console-00ADD8?style=flat-square&logo=go&logoColor=white)
+![WebRTC](https://img.shields.io/badge/WebRTC-WHEP-ffd9b3?style=flat-square&logo=webrtc&logoColor=black)
+![MQTT](https://img.shields.io/badge/MQTT-coop_control-c1f0d9?style=flat-square&logo=mqtt&logoColor=black)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-in--cluster-a8d1ff?style=flat-square&logo=kubernetes&logoColor=black)
+![balena](https://img.shields.io/badge/balena-Raspberry_Pi-d8c1ff?style=flat-square&logo=balena&logoColor=black)
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-chook.cam-ff9966?style=for-the-badge&logo=internetexplorer&logoColor=white)](https://chook.cam)
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-a8d1ff?style=for-the-badge&logo=github&logoColor=black)](https://github.com/lmacka/chickenfeed)
-[![Related](https://img.shields.io/badge/Related-Coopi_Controller-b3e6b3?style=for-the-badge&logo=github&logoColor=black)](https://github.com/lmacka/coopi)
+Watch my backyard chickens at **[chook.cam](https://chook.cam)**, drive the camera, and dispense
+treats. Sub-second video, and a control queue so everyone gets a turn.
 
-![FastAPI](https://img.shields.io/badge/FastAPI-Powered-009688?style=flat-square&logo=fastapi&logoColor=white)
-![SocketIO](https://img.shields.io/badge/Socket.IO-Real--time-010101?style=flat-square&logo=socket.io&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?style=flat-square&logo=docker&logoColor=white)
-![Tailscale](https://img.shields.io/badge/Tailscale-Secured-ffb3d1?style=flat-square&logo=tailscale&logoColor=white)
-![HLS](https://img.shields.io/badge/HLS-Streaming-ffd9b3?style=flat-square&logo=videojs&logoColor=white)
-![IoT](https://img.shields.io/badge/IoT-Hardware-c1f0d9?style=flat-square&logo=raspberrypi&logoColor=white)
+> A real deployment, not a demo. The design notes below are the ones that actually mattered.
 
-## 🐥 What is Chicken Feed?
+---
 
-**Watch and interact with my backyard chickens from anywhere in the world!**
-
-Chicken Feed is an interactive livestream that lets you not only watch my chicken coop in real-time but also:
-
-- 📹 Control the camera to look at different areas of the coop
-- 🪱 Dispense treats to the chickens with the push of a button
-- 💡 Turn the coop lights on and off
-- 🌡️ View real-time environmental data like temperature and humidity
-- 💬 Chat with other chicken enthusiasts
-
-All from the comfort of your web browser, with no downloads required!
-
-## 🎮 How to Use It
-
-1. Visit [chook.cam](https://chook.cam) on any modern browser
-2. Watch the live chicken stream
-3. Click the power button to request control (if available)
-4. Once you have control, use the buttons to:
-   - Move the camera to different preset positions
-   - Dispense treats to the chickens
-   - Toggle the coop lights on/off
-5. Chat with other viewers in the chat panel
-
-Each visitor gets 30 seconds of control before it's passed to the next person in line. Commands have cooldown periods to prevent overuse and keep the chickens happy!
-
-> 🕒 **Note:** Treat dispensing is only available during daylight hours to respect the chickens' sleep schedule.
-
-## 🏗️ System Overview
+## How it fits together
 
 ```mermaid
----
-config:
-  layout: dagre
-  look: neo
----
-flowchart TD
- subgraph Users["Internet Users"]
-    direction LR
-        Viewers["Web Browser"]
-  end
- subgraph VPS["VPS (Docker Containers)"]
-    direction LR
-        VPSTailscale["Tailscale Client"]
-        MediaMTX["MediaMTX (RTSP→HLS)"]
-        SWAG["SWAG (Nginx + SSL)"]
-        ChickyControl["Chicky Control Server"]
-  end
- subgraph Hardware["Hardware Controls"]
-    direction LR
-        Servos["Servo Motors"]
-        Lights["Relay-controlled Lights"]
-        Sensors["Environmental Sensors"]
-  end
- subgraph HomeNet["Home Network"]
-    direction LR
-        Router["Router with Tailscale"]
-        Camera["TP-Link Tapo C220 Camera"]
-        RaspPi["Raspberry Pi (Chicky)"]
-        Hardware
-  end
-    RaspPi --> Hardware
-    Users -- HLS stream (https) --> SWAG
-    SWAG --> MediaMTX & ChickyControl
-    MediaMTX --> VPSTailscale
-    VPSTailscale --> Router & Router
-    Router --> Camera & RaspPi
-    Users -- HTML (https) --> SWAG
-    Users -- Websocket (wss) --> SWAG
-    ChickyControl --> VPSTailscale
-     Viewers:::viewerNode
-     VPSTailscale:::tailscaleNode
-     MediaMTX:::mediaNode
-     SWAG:::swagNode
-     ChickyControl:::controlNode
-     Servos:::hardwareNode
-     Lights:::hardwareNode
-     Sensors:::hardwareNode
-     Router:::routerNode
-     Camera:::cameraNode
-     RaspPi:::raspberryNode
-    classDef routerNode fill:#a8d1ff,stroke:#3a87ff,stroke-width:2px,color:#333,font-weight:bold
-    classDef cameraNode fill:#ffccb3,stroke:#ff8c66,stroke-width:2px,color:#333
-    classDef raspberryNode fill:#b3e6b3,stroke:#66cc66,stroke-width:2px,color:#333
-    classDef hardwareNode fill:#c1f0d9,stroke:#7ad3a7,stroke-width:1px,color:#333
-    classDef tailscaleNode fill:#d8c1ff,stroke:#b38aff,stroke-width:2px,color:#333,font-weight:bold
-    classDef mediaNode fill:#ffd9b3,stroke:#ffb366,stroke-width:2px,color:#333
-    classDef swagNode fill:#ffb3d1,stroke:#ff80ab,stroke-width:2px,color:#333
-    classDef controlNode fill:#b3e6f2,stroke:#66ccdf,stroke-width:2px,color:#333
-    classDef viewerNode fill:#d9d9d9,stroke:#a6a6a6,stroke-width:2px,color:#333
-    linkStyle 0 stroke:#2962FF,fill:none
-    linkStyle 1 stroke:#FF6D00,fill:none
-    linkStyle 2 stroke:#FF6D00,fill:none
-    linkStyle 3 stroke:#2962FF,fill:none
-    linkStyle 4 stroke:#FF6D00,fill:none
-    linkStyle 5 stroke:#FF6D00,fill:none
-    linkStyle 6 stroke:#2962FF,fill:none
-    linkStyle 7 stroke:#FF6D00,fill:none
-    linkStyle 8 stroke:#2962FF,fill:none
-    linkStyle 10 stroke:#2962FF,fill:none
-    linkStyle 11 stroke:#2962FF,fill:none
-```
-
-## 🧩 System Components
-
-### 💻 Cloud Server (VPS)
-
-- **Web Interface**: Retro-styled control panel with live chat
-- **Control Server**: FastAPI + Socket.IO backend for real-time control
-- **Video Streaming**: MediaMTX for converting RTSP to web-friendly HLS
-- **Web Server**: SWAG (Nginx with SSL) for secure web hosting
-- **Network Security**: Tailscale VPN client for secure tunneling
-
-### 🏠 Home Setup
-
-- **Brain**: Raspberry Pi running custom Python controllers
-- **Eyes**: TP-Link Tapo C220 PTZ IP camera
-- **Treats**: Servo-controlled treat dispenser
-- **Lighting**: Relay-controlled coop lights
-- **Sensing**: Temperature, humidity, pressure, and light sensors
-- **Networking**: Tailscale VPN for secure connectivity
-
-## 🔧 Technical Deep Dive
-
-### 🚀 Solving the Streaming Challenge
-
-One of the biggest challenges was figuring out how to stream video from my home network to potentially many viewers without:
-
-1. Exposing my home network directly to the internet
-2. Overwhelming my home internet connection's upload bandwidth
-3. Requiring viewers to install special software
-
-**Solution: Single-connection proxied HLS streaming**
-
-- The camera streams RTSP video to the local Raspberry Pi
-- A single secure connection carries this stream to the cloud VPS via Tailscale
-- MediaMTX on the VPS converts the RTSP stream to web-friendly HLS format
-- Each viewer connects to the VPS, not my home network
-- Result: Unlimited viewers with only one connection to my home!
-
-### 🔒 Security Architecture
-
-```mermaid
----
-config:
-  layout: dagre
-  look: neo
----
 flowchart LR
-    User["Internet User"]
-    SSL["SSL Termination"]
-    Auth["Auth Layer"]
-    Tailscale["Tailscale Network"]
-    Home["Home Network"]
-    
-    User -->|HTTPS| SSL
-    SSL -->|HTTP| Auth
-    Auth -->|If Authorized| Tailscale
-    Tailscale -->|Encrypted| Home
-    
-    User:::viewerNode
-    SSL:::swagNode
-    Auth:::controlNode
-    Tailscale:::tailscaleNode
-    Home:::routerNode
-    
-    classDef routerNode fill:#a8d1ff,stroke:#3a87ff,stroke-width:2px,color:#333,font-weight:bold
-    classDef tailscaleNode fill:#d8c1ff,stroke:#b38aff,stroke-width:2px,color:#333,font-weight:bold
-    classDef swagNode fill:#ffb3d1,stroke:#ff80ab,stroke-width:2px,color:#333
-    classDef controlNode fill:#b3e6f2,stroke:#66ccdf,stroke-width:2px,color:#333
-    classDef viewerNode fill:#d9d9d9,stroke:#a6a6a6,stroke-width:2px,color:#333
-    
-    linkStyle 0 stroke:#FF6D00,fill:none
-    linkStyle 1 stroke:#FF6D00,fill:none
-    linkStyle 2 stroke:#2962FF,fill:none
-    linkStyle 3 stroke:#2962FF,fill:none
+  subgraph coop["Coop (isolated VLAN)"]
+    CAM["PTZ camera<br/>RTSP + ONVIF"]
+    PI["Raspberry Pi<br/>servo, relay, sensors"]
+  end
+  subgraph cluster["Home cluster"]
+    PUSH["stream-pusher<br/>ffmpeg transcode"]
+    APP["chook-app<br/>Go console"]
+    MQ["MQTT broker"]
+  end
+  subgraph edge["Public edge"]
+    RELAY["VPS relay<br/>mediamtx"]
+    CF["Cloudflare Tunnel"]
+  end
+  V["Viewers"]
+  CAM -->|RTSP| PUSH
+  PUSH -->|"SRT, encrypted"| RELAY
+  RELAY -->|"WHEP and HLS"| V
+  PI -->|"MQTT out"| MQ
+  MQ <--> APP
+  APP -->|"ONVIF PTZ"| CAM
+  CF --> APP
+  V -->|"HTML and API"| CF
 ```
 
-Security was a primary concern when building this system:
+**Nothing on the internet reaches into the coop.** Every connection crossing the home boundary is
+opened from the inside: the cluster *pushes* video out, and the Pi *dials out* to the broker. An
+earlier version had the public VPS reach inward over a VPN subnet route, and when that route
+stopped being advertised the site went dark for months without anyone noticing.
 
-- **End-to-end encryption** using HTTPS and Tailscale WireGuard
-- **No port forwarding** needed on the home network
-- **Authentication tokens** for secure device-to-device communication
-- **Control system** with timeouts and authorization checks
-- **Rate limiting** to prevent abuse
-- **Profanity filtering** in the chat system
+## Layout
 
-### 🤖 Control Flow Architecture
+| Path | What it is | Runs on |
+|---|---|---|
+| `v2/app/` | `chook-app`: the public console. Go, serves the page and control API | Kubernetes, in-cluster |
+| `v2/vps/` | Video relay: mediamtx + swag. Receives SRT, fans out WebRTC/HLS | Small public VPS |
+| `v2/chicky/` | Coop controller: treat servo, light relay, climate sensors | Raspberry Pi, balena |
 
-When you click a button on the web interface, here's what happens:
+Kubernetes manifests live in a separate private GitOps repo, not here.
 
-1. Your browser sends a WebSocket message to the control server
-2. The server validates your control permissions
-3. If authorized, it forwards your command through the Tailscale tunnel
-4. The Raspberry Pi receives the command and activates the appropriate hardware
-5. A confirmation message is sent back through the same route
-6. Your browser updates to show the command was executed
+## Design notes worth stealing
 
-All of this happens in milliseconds, giving near real-time control!
+**The queue is the security model.** One visitor holds the console at a time for a 30-second turn,
+and every actuating request must carry that holder's token. Abuse requires holding the seat, which
+is limited to one person, so there is no per-endpoint rate limiter. Turnstile guards entry to the
+queue once per visitor rather than on every button press.
 
-### 📊 Sensor Data Collection
+**Safety lives on the device, not the website.** `chicky` decides whether a treat is actually
+dispensed: daylight window from a real sunrise/sunset calculation, cooldown, daily quota persisted
+across restarts, and a light auto-off timer. The web app can only *ask*. A bug in, or a full
+compromise of, the public site cannot overfeed the chickens or leave the light on all night.
 
-The system collects and displays real-time environmental data:
+**Browsers only decode Constrained Baseline H.264 over WebRTC.** The camera emits High profile.
+mediamtx does not transcode, so it negotiates `profile-level-id=42e01f` and then forwards a High
+profile bitstream: signalling succeeds completely and the browser renders nothing. `curl` and
+`ffprobe` both handle High profile fine, so no command-line check catches it. The pusher now
+transcodes to Constrained Baseline, which as a side effect also fixed an HLS muxer crash caused by
+the camera's clock jumping backwards.
 
-- **Temperature**: BME280 sensor (°C)
-- **Humidity**: BME280 sensor (%)
-- **Pressure**: BME280 sensor (hPa)
-- **Light level**: BH1750 sensor (lx)
+**WebRTC cannot carry AAC.** A WHEP viewer attaching to a stream carrying an AAC track made
+mediamtx panic and exit: a remote crash of the public origin, triggered by one viewer connecting.
+The stream is published video-only.
 
-This data helps monitor coop conditions and provides interesting information for viewers.
+**If it breaks, it should say so.** The previous version published no metrics, which is why an
+outage lasted months. Stream liveness, queue depth and command latency are scraped now, with an
+alert on the publisher going absent.
 
-### 🎨 UI Implementation
+## Running it
 
-The web interface features:
+Every component is configured by environment variables; there are no secrets in this repository.
+See `v2/app/main.go`, `v2/chicky/main.py` and `v2/vps/mediamtx.yml.example`.
 
-- **Retro-terminal aesthetic** with green text on dark background
-- **Seven-segment display** for the viewer count
-- **Draggable control panels** for customizable layout
-- **Visual cooldown indicators** on buttons
-- **Control timer** with circular progress indicator
-- **Mobile-responsive design** that works on any device
+```bash
+# console, locally
+cd v2/app && go run .           # :8080, needs MQTT_* and CAMERA_* set
 
-### 🐳 Deployment Architecture
+# coop controller, mock mode (no hardware needed)
+cd v2/chicky && python main.py  # :3000
 
-The entire system is containerized using Docker for easy deployment and updates:
+# safety envelope tests
+cd v2/chicky && python test_runner.py
+```
 
-- **SWAG container**: Web server with automatic SSL certificate renewal
-- **MediaMTX container**: Video streaming server
-- **Chicky-control container**: FastAPI control server
-- **Tailscale container**: Secure networking
-- **Raspberry Pi container**: Hardware control system
+## Security
 
-## 🚧 Future Improvements
+Secrets are never committed. Runtime config is injected by the platform: Kubernetes Secrets for the
+console, balena device variables for the Pi, and a gitignored `.env` for the relay. To report an
+issue, see [SECURITY.md](SECURITY.md).
 
-- [ ] Implement more advanced rate limiting on API endpoints
-- [ ] Improve control & cooldown handling for smoother user experience
-- [ ] Utilize a Coral TPU to learn to identify each chicken and name them
-- [ ] Further lock down the tailscale network
-- [ ] Improve chat security
+## Licence
 
-## 🔍 Technologies Used
-
-- **Backend**: FastAPI, Socket.IO, Python
-- **Frontend**: HTML5, CSS3, JavaScript, Video.js
-- **Hardware**: Raspberry Pi, GPIO, BME280, BH1750, Servos
-- **Networking**: Tailscale, RTSP, HLS
-- **Infrastructure**: Docker, SWAG (Nginx + Let's Encrypt), MediaMTX
-
-## 💭 Why This Project?
-
-I built Chicken Feed to solve a unique problem (monitoring my chickens) while exploring the intersection of:
-
-- Internet of Things (IoT) hardware
-- Real-time web technologies
-- Secure remote access
-- Video streaming optimization
-- Interactive user experiences
-
-The result is a fun project that demonstrates practical skills in full-stack development, hardware integration, and secure distributed systems.
-
----
-
-*Chicken Feed is open source and available for educational purposes. Feel free to use ideas from this project, but please be kind to your chickens if implementing something similar!*
+GPL-3.0. Be kind to your chickens.
