@@ -1,35 +1,6 @@
 services:
   # Tailscale VPN container
 
-  tailscale:
-    image: tailscale/tailscale:latest
-    container_name: tailscale
-    hostname: chook-vps
-    privileged: true
-    environment:
-      - TS_AUTHKEY=${TAILSCALE_AUTHKEY}
-      - TS_STATE_DIR=/var/lib/tailscale
-      - TS_USERSPACE=false
-      - TS_ACCEPT_DNS=false
-      - TS_EXTRA_ARGS=--accept-routes --advertise-tags=tag:container
-    volumes:
-      - tailscale-state:/var/lib/tailscale
-      - /dev/net/tun:/dev/net/tun
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    restart: unless-stopped
-    sysctls:
-      - net.ipv4.ip_forward=1
-      - net.ipv6.conf.all.forwarding=1
-    networks:
-      - chook-net
-    healthcheck:
-      test: ["CMD", "tailscale", "status", "--json"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
 
   # SWAG - Nginx/Let's Encrypt container
   swag:
@@ -41,9 +12,9 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=Australia/Brisbane
-      - URL=chook.cam
+      - URL=video.chook.cam
       - VALIDATION=http
-      - SUBDOMAINS=www,video
+      - SUBDOMAINS=
       - CERTPROVIDER=
       - EMAIL=${SWAG_EMAIL}
       - STAGING=false
@@ -72,55 +43,8 @@ services:
     networks:
       - chook-net
 
-  # Chook Server - Main application
-  chook-server:
-    build: ./chook-server
-    container_name: chook-server
-    restart: unless-stopped
-    environment:
-      - PORT=${PORT}
-      - PI_URL=http://${PI_IP}:3000
-      - LOG_LEVEL=${LOG_LEVEL}
-      - DEFAULT_TAILSCALE_IP=${DEFAULT_TAILSCALE_IP}
-      - CAMERA_IP=${CAMERA_IP}
-      - CAMERA_PORT=${CAMERA_PORT}
-      - CAMERA_USERNAME=${CAMERA_USERNAME}
-      - CAMERA_PASSWORD=${CAMERA_PASSWORD}
-      - HTTP_CLIENT_TIMEOUT=${HTTP_CLIENT_TIMEOUT}
-      - CAMERA_CLIENT_TIMEOUT=${CAMERA_CLIENT_TIMEOUT}
-      - HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL}
-      - SENSOR_FETCH_INTERVAL=${SENSOR_FETCH_INTERVAL}
-      - RATE_LIMIT_CLEANUP_INTERVAL=${RATE_LIMIT_CLEANUP_INTERVAL}
-      - SSE_HEARTBEAT_INTERVAL=${SSE_HEARTBEAT_INTERVAL}
-      - RATE_LIMIT_COOLDOWN_SECONDS=${RATE_LIMIT_COOLDOWN_SECONDS}
-      - CHAT_RATE_LIMIT_MESSAGES=${CHAT_RATE_LIMIT_MESSAGES}
-      - CHAT_RATE_LIMIT_WINDOW_SECONDS=${CHAT_RATE_LIMIT_WINDOW_SECONDS}
-      - CHAT_HISTORY_SIZE=${CHAT_HISTORY_SIZE}
-      - RATE_LIMIT_CLEANUP_MINUTES=${RATE_LIMIT_CLEANUP_MINUTES}
-      - DATABASE_PATH=${DATABASE_PATH}
-      - LOG_PATH=${LOG_PATH}
-      - STATIC_PATH=${STATIC_PATH}
-      - TEMPLATES_PATH=${TEMPLATES_PATH}
-      - CAMERA_PRESET_1_NAME=${CAMERA_PRESET_1_NAME}
-      - CAMERA_PRESET_2_NAME=${CAMERA_PRESET_2_NAME}
-      - CAMERA_PRESET_3_NAME=${CAMERA_PRESET_3_NAME}
-      - CAMERA_PRESET_4_NAME=${CAMERA_PRESET_4_NAME}
-    volumes:
-      - ./chat-logs:/app/logs
-      - ./chook-server/static:/app/static
-      - ./chook-server/templates:/app/templates
-    network_mode: service:tailscale
-    depends_on:
-      tailscale:
-        condition: service_healthy
-      swag:
-        condition: service_started
-      mediamtx:
-        condition: service_started
 
 networks:
   chook-net:
     driver: bridge
 
-volumes:
-  tailscale-state:
