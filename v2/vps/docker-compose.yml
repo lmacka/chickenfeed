@@ -1,8 +1,8 @@
 services:
-  # Tailscale VPN container
-
-
-  # SWAG - Nginx/Let's Encrypt container
+  # SWAG - Nginx/Let's Encrypt container.
+  # Scoped to video.chook.cam ALONE. It used to cover chook.cam and www too,
+  # but those now resolve to Cloudflare, so HTTP-01 for them cannot reach this
+  # box, and certbot fails the whole certificate if any name in it fails.
   swag:
     image: lscr.io/linuxserver/swag:latest
     container_name: swag

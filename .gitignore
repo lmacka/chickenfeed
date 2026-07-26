@@ -31,3 +31,7 @@ v2/vps/mediamtx.yml
 v2/app/chook-app
 *.exe
 *.bin
+
+# SWAG writes its own stock default.conf; only video.conf is ours
+v2/vps/swag-config/nginx/site-confs/default.conf
+v2/vps/swag-config/nginx/site-confs/default.conf.sample

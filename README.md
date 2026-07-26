@@ -5,6 +5,8 @@
 [![Live](https://img.shields.io/badge/live-chook.cam-ff9966?style=for-the-badge&logo=internetexplorer&logoColor=white)](https://chook.cam)
 [![Related](https://img.shields.io/badge/related-coopi_(coop_door)-b3e6b3?style=for-the-badge&logo=github&logoColor=black)](https://github.com/lmacka/coopi)
 
+[![CI](https://github.com/lmacka/chickenfeed/actions/workflows/ci.yml/badge.svg)](https://github.com/lmacka/chickenfeed/actions/workflows/ci.yml)
+
 ![Go](https://img.shields.io/badge/Go-console-00ADD8?style=flat-square&logo=go&logoColor=white)
 ![WebRTC](https://img.shields.io/badge/WebRTC-WHEP-ffd9b3?style=flat-square&logo=webrtc&logoColor=black)
 ![MQTT](https://img.shields.io/badge/MQTT-coop_control-c1f0d9?style=flat-square&logo=mqtt&logoColor=black)
@@ -94,10 +96,12 @@ Every component is configured by environment variables; there are no secrets in 
 See `v2/app/main.go`, `v2/chicky/main.py` and `v2/vps/mediamtx.yml.example`.
 
 ```bash
-# console, locally
-cd v2/app && go run .           # :8080, needs MQTT_* and CAMERA_* set
+# console. MQTT is required: with no broker reachable it exits rather than
+# pretending the coop is there.
+cd v2/app && go run .           # :8080
 
-# coop controller, mock mode (no hardware needed)
+# coop controller. Falls back to mock hardware when no GPIO is present,
+# so this runs anywhere.
 cd v2/chicky && python main.py  # :3000
 
 # safety envelope tests
