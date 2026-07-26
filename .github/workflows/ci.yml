@@ -60,9 +60,10 @@ jobs:
         env:
           STATE_DIR: /tmp/safety-test
           TREAT_DAILY_QUOTA: "3"
-        # No broker in CI, so the MQTT leg is skipped; the envelope rules are
-        # what actually protect the chickens and they run offline.
-        run: python test_runner.py || test $? -eq 1
+        # The broker leg self-skips without MQTT_HOST, so this is asserted
+        # strictly: the envelope rules are what protect the chickens and they
+        # run fine offline.
+        run: python test_runner.py
 
   secrets:
     name: Secret scan

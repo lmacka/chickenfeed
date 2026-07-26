@@ -2,10 +2,11 @@
 """
 Sensor controller for environmental sensors
 """
-import time
 import logging
-from smbus2 import SMBus
+import time
+
 from bme280 import BME280
+from smbus2 import SMBus
 
 logger = logging.getLogger(__name__)
 

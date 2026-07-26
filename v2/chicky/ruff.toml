@@ -1,0 +1,20 @@
+# Lint rules for the coop controller.
+#
+# Deliberately explicit rather than relying on ruff's evolving defaults, so a
+# ruff upgrade cannot fail CI on style opinions that were never agreed.
+target-version = "py311"
+line-length = 100
+
+[lint]
+# Real-bug rules: pyflakes, import hygiene, bugbear, pyupgrade, comprehensions.
+select = ["E", "F", "I", "B", "C4", "UP"]
+
+ignore = [
+  # Long lines are almost always log strings or sensor formatting here.
+  "E501",
+]
+
+# Note: blind-except (BLE001) is intentionally NOT selected. The hardware
+# modules catch broadly on purpose: a failing sensor or a wedged servo must
+# degrade to a logged error, never take down the controller that also enforces
+# the treat quota and the light auto-off timer.

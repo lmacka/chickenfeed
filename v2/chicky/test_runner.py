@@ -54,7 +54,7 @@ print("\n=== daily quota enforcement ===")
 s3 = SafetyEnvelope(relay=None)
 s3.daylight_only = False
 s3.treat_cooldown = 0
-for i in range(3):
+for _ in range(3):
     ok, _ = s3.begin_dispense()
     s3.end_dispense(ok)
 a4, r4 = s3.begin_dispense()
@@ -100,6 +100,17 @@ time.sleep(0.5)
 check("auto-off switched the relay off", fr.calls and fr.calls[-1] is False, f"calls={fr.calls}")
 
 print("\n=== MQTT bridge against the real broker ===")
+# Skipped without a broker, so CI can assert a clean exit rather than
+# tolerating a non-zero one and masking real failures along with it.
+if not os.getenv("MQTT_HOST"):
+    print("SKIP  broker checks (MQTT_HOST unset)")
+    print("\n=== RESULT ===")
+    if fails:
+        print("FAILURES:", ", ".join(fails))
+        sys.exit(1)
+    print("all checks passed (broker leg skipped)")
+    sys.exit(0)
+
 bridge = main.mqtt_bridge
 bridge.start()
 connected = False

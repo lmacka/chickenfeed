@@ -11,9 +11,6 @@ updates:
   - package-ecosystem: docker
     directory: /v2/chicky
     schedule: { interval: weekly }
-  - package-ecosystem: docker
-    directory: /v2/vps
-    schedule: { interval: weekly }
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
