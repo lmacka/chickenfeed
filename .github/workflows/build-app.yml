@@ -1,0 +1,64 @@
+name: Build chook-app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "v2/app/**"
+      - ".github/workflows/build-app.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-app
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # Self-hosted runner inside the cluster. It can reach buildkitd and the
+    # internal registry directly, so this public repository needs no registry
+    # credentials: the image is built and stored entirely in-cluster.
+    runs-on: coopernetes-chickenfeed
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive tag
+        id: tag
+        run: echo "tag=$(date -u +%Y%m%d%H%M)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Install buildctl
+        run: |
+          set -eu
+          ver=v0.18.2
+          curl -fsSL "https://github.com/moby/buildkit/releases/download/${ver}/buildkit-${ver}.linux-amd64.tar.gz" \
+            | tar xz -C /tmp bin/buildctl
+          sudo install /tmp/bin/buildctl /usr/local/bin/buildctl
+          buildctl --version
+
+      - name: Build and push to zot
+        env:
+          IMG: zot.registry.svc.cluster.local:5000/chickenfeed/chook-app
+        run: |
+          set -eu
+          buildctl --addr "$BUILDKIT_HOST" build \
+            --frontend dockerfile.v0 \
+            --local context=v2/app --local dockerfile=v2/app \
+            --output "type=image,name=${IMG}:${{ steps.tag.outputs.tag }},push=true,registry.insecure=true"
+
+      - name: Summary
+        run: |
+          {
+            echo "### chook-app built"
+            echo
+            echo '```'
+            echo "registry.coopernetes.com/chickenfeed/chook-app:${{ steps.tag.outputs.tag }}"
+            echo '```'
+            echo
+            echo "Kubelet pulls over \`registry.coopernetes.com\`; the in-cluster service name"
+            echo "is the push path only, because kubelet does not use cluster DNS."
+            echo
+            echo "Roll it out by setting that tag on \`image\` and \`APP_VERSION\` in"
+            echo "\`kubernetes/apps/chickenfeed/chook-app/app/deployment.yaml\` in the GitOps repo."
+          } >> "$GITHUB_STEP_SUMMARY"
