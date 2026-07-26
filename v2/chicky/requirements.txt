@@ -1,5 +1,5 @@
 # Web framework (only items not installed via apt)
-python-multipart==0.0.6
+python-multipart==0.0.32
 
 # Hardware control libraries (exact versions from original)
 automationhat==1.0.0
