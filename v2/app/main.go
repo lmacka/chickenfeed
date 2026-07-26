@@ -134,9 +134,18 @@ func main() {
 	// MQTT is required: without it there is no coop state and no way to send a
 	// command, so failing fast is better than serving a console that silently
 	// does nothing.
+	// Client ID must be unique per process. A fixed one makes a rolling update
+	// flap: old and new pods share it, the broker evicts whichever connected
+	// first, and they fight until the old pod dies. Suffix with the hostname,
+	// which is the pod name under Kubernetes.
+	clientID := env("MQTT_CLIENT_ID", "chook-app")
+	if h, herr := os.Hostname(); herr == nil && h != "" {
+		clientID = clientID + "-" + h
+	}
+
 	app.coop, err = NewCoop(
 		env("MQTT_BROKER", "tcp://mosquitto.homeassist.svc.cluster.local:1883"),
-		env("MQTT_CLIENT_ID", "chook-app"),
+		clientID,
 		os.Getenv("MQTT_USER"), os.Getenv("MQTT_PASS"),
 		env("MQTT_BASE_TOPIC", "chickenfeed/coop"),
 	)
