@@ -43,6 +43,7 @@ check("quota read from env", st["daily_quota"] == 3, f"quota={st['daily_quota']}
 print("\n=== cooldown enforcement ===")
 s2 = SafetyEnvelope(relay=None)
 s2.daylight_only = False  # isolate the cooldown rule from the time of day
+s2.treat_paced = False    # and from daylight pacing
 a1, r1 = s2.begin_dispense()
 check("first dispense allowed", a1, r1)
 s2.end_dispense(True)
@@ -53,6 +54,7 @@ check("cooldown reason is human readable", "cooling down" in r2, r2)
 print("\n=== daily quota enforcement ===")
 s3 = SafetyEnvelope(relay=None)
 s3.daylight_only = False
+s3.treat_paced = False
 s3.treat_cooldown = 0
 for _ in range(3):
     ok, _ = s3.begin_dispense()
@@ -66,6 +68,21 @@ print("\n=== quota persists across restart ===")
 s4 = SafetyEnvelope(relay=None)
 check("counter survived reinstantiation", s4.status()["treats_today"] == 3,
       f"treats_today={s4.status()['treats_today']}")
+
+print("\n=== daylight pacing ===")
+sp = SafetyEnvelope(relay=None)
+sp.daylight_only = False
+sp.treat_paced = True
+sp.treat_cooldown = 0
+sp._dispense_count = 0
+sp._last_dispense = sp._now()
+gap = sp._pace_seconds(sp._now())
+check("pace gap is daylight/quota, not the cooldown", gap > 60, f"gap={gap:.0f}s")
+pa, pr = sp.can_dispense()
+check("pacing blocks straight after a treat", not pa, pr)
+pst = sp.status()
+check("status carries next_allowed_at while blocked",
+      pst["next_allowed_at"] is not None, str(pst["next_allowed_at"]))
 
 print("\n=== daylight gate ===")
 s5 = SafetyEnvelope(relay=None)

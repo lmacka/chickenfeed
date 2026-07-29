@@ -47,6 +47,8 @@ type App struct {
 	presets      []Preset
 	trustProxy   bool
 	assetVersion string
+	treatPreset  string
+	treatSettle  time.Duration
 }
 
 type Preset struct {
@@ -110,11 +112,16 @@ func main() {
 		// against stale CSS and the layout silently does not change.
 		assetVersion: env("APP_VERSION", strconv.FormatInt(time.Now().Unix(), 10)),
 		presets: []Preset{
-			{Token: "1", Name: env("PRESET_1_NAME", "Viewpoint 1"), Icon: "1"},
-			{Token: "2", Name: env("PRESET_2_NAME", "Viewpoint 2"), Icon: "2"},
-			{Token: "3", Name: env("PRESET_3_NAME", "Viewpoint 3"), Icon: "3"},
-			{Token: "4", Name: env("PRESET_4_NAME", "Viewpoint 4"), Icon: "4"},
+			{Token: "1", Name: env("PRESET_1_NAME", "Window"), Icon: "1"},
+			{Token: "2", Name: env("PRESET_2_NAME", "Feeder"), Icon: "2"},
+			{Token: "3", Name: env("PRESET_3_NAME", "Water"), Icon: "3"},
+			{Token: "4", Name: env("PRESET_4_NAME", "Bed"), Icon: "4"},
 		},
+		// A treat only counts if the audience sees it land, so the camera is
+		// swung to the feeder preset first and the dispense waits for it.
+		// Empty disables the swing.
+		treatPreset: env("TREAT_PRESET_TOKEN", "2"),
+		treatSettle: time.Duration(envInt("TREAT_SETTLE_SECONDS", 4)) * time.Second,
 	}
 
 	if !app.turnstile.Enabled() {
@@ -262,6 +269,7 @@ type pageData struct {
 	Presets      []Preset
 	TurnSeconds  int
 	AssetVersion string
+	TreatPreset  string
 }
 
 func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -281,6 +289,7 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 		Presets:      a.presets,
 		TurnSeconds:  int(a.queue.turn.Seconds()),
 		AssetVersion: a.assetVersion,
+		TreatPreset:  a.treatPreset,
 	}); err != nil {
 		log.Printf("template: %v", err)
 	}
@@ -300,6 +309,9 @@ type stateResp struct {
 	Coop      CoopView      `json:"coop"`
 	You       youState      `json:"you"`
 	VideoBase string        `json:"video_base"`
+	// Seconds until the next treat is allowed, computed here so client clock
+	// skew cannot skew the countdown. 0 when allowed or unknown.
+	TreatWait int `json:"treat_wait_seconds"`
 }
 
 type youState struct {
@@ -309,12 +321,29 @@ type youState struct {
 	InQueue     bool `json:"in_queue"`
 }
 
+func treatWaitSeconds(v CoopView) int {
+	if v.Status.TreatsAllowed || v.Status.NextAllowedAt == "" {
+		return 0
+	}
+	t, err := time.Parse(time.RFC3339, v.Status.NextAllowedAt)
+	if err != nil {
+		return 0
+	}
+	d := time.Until(t)
+	if d < 0 {
+		return 0
+	}
+	return int(d.Seconds())
+}
+
 func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 	tok := token(r)
 	driving, pos, left, _ := a.queue.Status(tok)
+	view := a.coop.View()
 	writeJSON(w, http.StatusOK, stateResp{
-		Queue: a.queue.Snapshot(),
-		Coop:  a.coop.View(),
+		Queue:     a.queue.Snapshot(),
+		Coop:      view,
+		TreatWait: treatWaitSeconds(view),
 		You: youState{
 			Driving:     driving,
 			Position:    pos,
@@ -390,6 +419,16 @@ func (a *App) handleTreat(w http.ResponseWriter, r *http.Request) {
 		metricCommands.WithLabelValues("treat", "refused").Inc()
 		writeJSON(w, http.StatusConflict, map[string]string{"error": v.Status.Reason})
 		return
+	}
+	// Swing the camera to the feeder before dispensing so the viewer watches
+	// the treat land. A PTZ failure logs and dispenses anyway: the chicken
+	// getting the treat matters more than the shot.
+	if a.treatPreset != "" {
+		if err := a.ptz.GotoPreset(a.treatPreset); err != nil {
+			log.Printf("treat: feeder swing failed: %v", err)
+		} else {
+			time.Sleep(a.treatSettle)
+		}
 	}
 	if err := a.coop.Treat(); err != nil {
 		metricCommands.WithLabelValues("treat", "error").Inc()

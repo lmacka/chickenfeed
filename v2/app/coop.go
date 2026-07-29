@@ -33,6 +33,7 @@ type CoopStatus struct {
 	TreatsRemaining int    `json:"treats_remaining"`
 	DailyQuota      int    `json:"daily_quota"`
 	CooldownSeconds int    `json:"cooldown_seconds"`
+	NextAllowedAt   string `json:"next_allowed_at"`
 }
 
 type Coop struct {

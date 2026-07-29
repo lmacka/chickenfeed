@@ -20,7 +20,7 @@ import json
 import logging
 import os
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from datetime import time as dtime
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,11 @@ class SafetyEnvelope:
         # as a mechanical guard; this is the higher, policy-level limit that
         # stops a public button turning into a feed firehose.
         self.treat_cooldown = _env_int("TREAT_COOLDOWN_SECONDS", 30)
-        self.treat_daily_quota = _env_int("TREAT_DAILY_QUOTA", 20)
+        self.treat_daily_quota = _env_int("TREAT_DAILY_QUOTA", 6)
+        # Paced mode spreads the daily quota evenly through the daylight
+        # window instead of allowing a burst: gap = daylight / quota. The
+        # cooldown above remains the floor.
+        self.treat_paced = os.getenv("TREAT_PACED", "true").lower() != "false"
         self.light_auto_off_minutes = _env_int("LIGHT_AUTO_OFF_MINUTES", 30)
         self.daylight_only = os.getenv("TREAT_DAYLIGHT_ONLY", "true").lower() != "false"
 
@@ -120,15 +124,14 @@ class SafetyEnvelope:
         except Exception:
             return datetime.now()
 
-    def is_daylight(self):
-        """True when the sun is up at the coop.
+    def _sun_window(self, now, days_ahead=0):
+        """(sunrise, sunset) for now.date() + days_ahead, in the coop tz.
 
         Uses a real sunrise/sunset calculation when astral is available, and a
-        fixed local-time window otherwise. The point of the rule is the
-        chickens' sleep schedule, so it keys off the sun rather than measured
-        lux: switching the coop light on at midnight must not unlock treats.
+        fixed local-time window otherwise. A broken almanac must not brick the
+        feeder.
         """
-        now = self._now()
+        date = now.date() + timedelta(days=days_ahead)
         try:
             from astral import LocationInfo
             from astral.sun import sun
@@ -136,11 +139,61 @@ class SafetyEnvelope:
                 name="coop", region="AU", timezone=self.timezone,
                 latitude=self.latitude, longitude=self.longitude,
             )
-            times = sun(loc.observer, date=now.date(), tzinfo=now.tzinfo)
-            return times["sunrise"] <= now <= times["sunset"]
+            times = sun(loc.observer, date=date, tzinfo=now.tzinfo)
+            return times["sunrise"], times["sunset"]
         except Exception as exc:
             logger.warning("Sun calculation unavailable (%s); using fixed window", exc)
-            return FALLBACK_DAWN <= now.time() <= FALLBACK_DUSK
+            return (
+                datetime.combine(date, FALLBACK_DAWN, tzinfo=now.tzinfo),
+                datetime.combine(date, FALLBACK_DUSK, tzinfo=now.tzinfo),
+            )
+
+    def is_daylight(self):
+        """True when the sun is up at the coop.
+
+        The point of the rule is the chickens' sleep schedule, so it keys off
+        the sun rather than measured lux: switching the coop light on at
+        midnight must not unlock treats.
+        """
+        now = self._now()
+        sunrise, sunset = self._sun_window(now)
+        return sunrise <= now <= sunset
+
+    def _pace_seconds(self, now):
+        """Minimum gap between treats: daylight / quota, floored by cooldown."""
+        if not self.treat_paced:
+            return self.treat_cooldown
+        sunrise, sunset = self._sun_window(now)
+        window = max(0.0, (sunset - sunrise).total_seconds())
+        return max(float(self.treat_cooldown), window / max(1, self.treat_daily_quota))
+
+    def _next_allowed(self, now):
+        """When the next treat becomes possible, or None if allowed right now.
+
+        Best effort: if state is inconsistent (clock jumps, tz changes) the
+        answer degrades to None rather than raising, because this feeds a UI
+        countdown, not the gate itself.
+        """
+        allowed, _ = self.can_dispense()
+        if allowed:
+            return None
+        try:
+            sunrise, sunset = self._sun_window(now)
+            tomorrow_sunrise = self._sun_window(now, days_ahead=1)[0]
+            if self.daylight_only and now < sunrise:
+                return sunrise
+            if self.daylight_only and now > sunset:
+                return tomorrow_sunrise
+            if self._dispense_count >= self.treat_daily_quota:
+                return tomorrow_sunrise
+            if self._last_dispense is not None:
+                cand = self._last_dispense + timedelta(seconds=self._pace_seconds(now))
+                if self.daylight_only and cand > sunset:
+                    return tomorrow_sunrise
+                return cand
+        except Exception as exc:
+            logger.warning("Could not compute next_allowed (%s)", exc)
+        return None
 
     def _roll_quota_if_needed(self, now):
         today = now.date().isoformat()
@@ -167,9 +220,12 @@ class SafetyEnvelope:
                 return False, f"daily treat limit of {self.treat_daily_quota} reached"
 
             if self._last_dispense is not None:
+                gap = self._pace_seconds(now)
                 elapsed = (now - self._last_dispense).total_seconds()
-                if elapsed < self.treat_cooldown:
-                    wait = int(self.treat_cooldown - elapsed) + 1
+                if elapsed < gap:
+                    wait = int(gap - elapsed) + 1
+                    if wait > 90:
+                        return False, f"spacing treats out, next one in {wait // 60 + 1} min"
                     return False, f"cooling down, try again in {wait}s"
 
             return True, "ok"
@@ -240,6 +296,7 @@ class SafetyEnvelope:
             now = self._now()
             self._roll_quota_if_needed(now)
             allowed, reason = self.can_dispense()
+            nxt = self._next_allowed(now)
             return {
                 "treats_allowed": allowed,
                 "reason": reason,
@@ -248,6 +305,7 @@ class SafetyEnvelope:
                 "treats_remaining": max(0, self.treat_daily_quota - self._dispense_count),
                 "daily_quota": self.treat_daily_quota,
                 "cooldown_seconds": self.treat_cooldown,
+                "next_allowed_at": nxt.isoformat() if nxt else None,
                 "last_dispense": self._last_dispense.isoformat() if self._last_dispense else None,
                 "light_auto_off_minutes": self.light_auto_off_minutes,
                 "light_on_since": self._light_on_since.isoformat() if self._light_on_since else None,

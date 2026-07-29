@@ -1,133 +1,158 @@
-/* Chook.cam.
-   The stream is the page. Controls are a gimmick and behave like normal video
-   player chrome: a slim dock that fades when idle and returns on any input.
-   Retro-terminal palette kept from the original console. */
+/* Chook.cam, the broadcast look.
+   The stream is the page; the chrome is a light overlay HUD, not a terminal.
+   The video is NEVER cropped: portrait puts the whole 16:9 frame under a slim
+   header with the HUD in the space below it; landscape/TV go full-bleed with
+   object-fit contain, which fits a 16:9 screen exactly and letterboxes
+   anything odd. Unavailable controls grey out; there is no status prose. */
+
+@font-face{
+  font-family:'Schibsted Grotesk';
+  src:url('schibsted.woff2') format('woff2');
+  font-weight:100 900;
+  font-display:swap;
+}
+
 :root{
-  --bg:#0a0a0a; --panel:rgba(24,19,14,.92); --line:#3a3028;
-  --ink:#ece0cc; --dim:#a8977e; --faint:#7b6c58;
-  --green:#5fe07d; --amber:#ffb347; --red:#ff6a4d;
-  --mono:'Courier New',ui-monospace,monospace;
+  --stage:#101214;
+  --ink:#fff;
+  --dim:#c9cfda;
+  --accent:#ffd166;
+  --live:#ff4d3d;
+  --glass:rgba(255,255,255,.08);
+  --glass-heavy:rgba(20,22,26,.55);
   color-scheme:dark;
 }
+
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);overflow:hidden}
+body{
+  margin:0;background:var(--stage);color:var(--ink);
+  font-family:'Schibsted Grotesk',system-ui,sans-serif;
+  -webkit-tap-highlight-color:transparent;
+}
 
-/* ---------- stream ----------
-   Landscape/desktop: the player is a fixed full-screen layer and the video
-   fills it. Portrait: it becomes a normal flow block at the top, sized to the
-   stream's own 16:9. Stretching a 16:9 stream to a tall viewport gives either
-   a thin letterboxed strip (contain) or a heavily cropped vertical slice
-   (cover); neither is watchable, so in portrait the video is simply as wide as
-   the screen and the controls sit under it. */
-.player{position:fixed;inset:0;z-index:0;background:#000}
-.stage{width:100%;height:100%;object-fit:cover;background:#000;display:block}
+/* ---------- header ---------- */
+.hd{display:flex;align-items:center;gap:.6rem;padding:.9rem 1rem .7rem}
+.brand{font-weight:700;font-size:.95rem;letter-spacing:.02em;color:var(--ink);text-decoration:none}
+.brand b{color:var(--accent);font-weight:700}
+.livechip{display:flex;align-items:center;gap:.35rem;font-size:.6rem;font-weight:700;
+  letter-spacing:.16em;padding:.18rem .5rem;border-radius:999px;background:var(--live)}
+.livechip .dot{width:.4rem;height:.4rem;border-radius:50%;background:#fff}
+body.night .livechip{background:rgba(96,106,126,.85)}
+.meta{margin-left:auto;font-size:.78rem;font-weight:700;color:var(--ink);
+  font-variant-numeric:tabular-nums}
+
+/* ---------- video ---------- */
+.vidwrap{position:relative}
+/* Soft ambient glow so the empty stage around the picture never reads as
+   dead black bars. Static and cheap; no second decode. */
+.vidwrap::before{
+  content:"";position:absolute;inset:-2.2rem 0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(60% 50% at 50% 20%, rgba(122,160,175,.5), transparent 70%),
+    radial-gradient(60% 50% at 50% 85%, rgba(193,147,90,.45), transparent 70%);
+  filter:blur(38px);opacity:.35;
+}
+body.night .vidwrap::before{opacity:.12}
+.stage-video{position:relative;z-index:1;display:block;width:100%;aspect-ratio:16/9;
+  background:#000;object-fit:contain}
 .stage-overlay{
-  position:absolute;inset:0;z-index:3;display:grid;place-items:center;text-align:center;
-  background:rgba(10,10,10,.88);color:var(--dim);padding:1.5rem;font-size:.9rem;line-height:1.7
+  position:absolute;inset:0;z-index:2;display:grid;place-items:center;text-align:center;
+  background:rgba(10,12,14,.88);color:var(--dim);padding:1.5rem;
+  font-size:.85rem;line-height:1.7;
 }
 .stage-overlay[hidden]{display:none}
-.stage-overlay b{display:block;color:var(--ink);font-size:1.05rem;margin-bottom:.5rem}
+.stage-overlay b{display:block;color:var(--ink);font-size:1rem;margin-bottom:.5rem}
+.fstap{position:absolute;right:.6rem;bottom:.6rem;z-index:3;
+  width:2.2rem;height:2.2rem;border-radius:9px;border:0;cursor:pointer;
+  display:grid;place-items:center;background:rgba(10,12,14,.5);color:#e6eaf1}
+.fstap svg{width:1.05rem;height:1.05rem}
 
-/* ---------- always-visible status pill ---------- */
-.pill{
-  position:fixed;z-index:2;top:.85rem;left:.85rem;
-  display:flex;align-items:center;gap:.5rem;
-  padding:.32rem .6rem;border-radius:999px;
-  background:rgba(10,10,10,.55);border:1px solid rgba(255,255,255,.09);
-  font-size:.68rem;letter-spacing:.09em;color:var(--dim);
-  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
-  transition:opacity .35s;
-}
-.pill .dot{width:.42rem;height:.42rem;border-radius:50%;background:var(--faint);flex:none}
-.pill .dot.ok{background:var(--green);box-shadow:0 0 0 3px rgba(95,224,125,.18)}
-.pill .dot.bad{background:var(--red);box-shadow:0 0 0 3px rgba(255,106,77,.18)}
-.pill .sep{color:var(--faint);opacity:.5}
-.pill a{color:var(--faint);text-decoration:none}
-.pill a:hover{color:var(--amber)}
+/* ---------- HUD ---------- */
+.hud{display:flex;flex-direction:column;gap:.8rem;align-items:center;
+  padding:1rem 1rem 1.2rem}
+.views{display:flex;gap:.3rem;padding:.28rem;border-radius:999px;background:var(--glass);
+  max-width:100%;overflow-x:auto}
+.vbtn{border:0;border-radius:999px;padding:.5rem .85rem;cursor:pointer;
+  font-family:inherit;font-size:.78rem;font-weight:500;color:var(--dim);
+  background:transparent;white-space:nowrap}
+.vbtn.on{background:#fff;color:#17191d;font-weight:700}
+.vbtn:focus-visible,.treatdial:focus-visible,.lightdial:focus-visible,
+.fstap:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 
-/* ---------- the dock ---------- */
-.dock{
-  position:fixed;z-index:4;left:50%;bottom:1rem;transform:translateX(-50%);
-  width:min(46rem,calc(100vw - 1.5rem));
-  background:var(--panel);border:1px solid var(--line);border-radius:8px;
-  box-shadow:0 10px 40px rgba(0,0,0,.55);
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  padding:.6rem .7rem;
-  display:flex;flex-direction:column;gap:.5rem;
-  transition:opacity .35s, transform .35s;
-}
-/* Idle: fade the dock out, but never while the visitor holds the console. */
-.dock.idle{opacity:0;transform:translateX(-50%) translateY(.6rem);pointer-events:none}
-.pill.idle{opacity:.45}
+.ctlrow{display:flex;align-items:center;gap:.8rem;justify-content:center}
+.treatdial{position:relative;width:4.8rem;height:4.8rem;border-radius:50%;border:0;
+  cursor:pointer;background:var(--glass);color:var(--ink);font-family:inherit;
+  display:grid;place-items:center;padding:0}
+.treatdial:disabled{cursor:default}
+.ring{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:4}
+.ring .track{stroke:rgba(255,255,255,.2)}
+.ring .arc{stroke:var(--accent);stroke-dasharray:216;stroke-dashoffset:0;
+  stroke-linecap:round;transition:stroke-dashoffset .6s}
+.treatdial .lbl{font-size:.8rem;font-weight:700;line-height:1.25;text-align:center;
+  font-variant-numeric:tabular-nums}
+.treatdial .lbl small{display:block;font-size:.58rem;font-weight:500;color:var(--dim)}
+.treatdial.busy{cursor:wait}
+.treatdial.busy .arc{stroke-dasharray:40 176;animation:orbit 1.1s linear infinite}
+@keyframes orbit{to{stroke-dashoffset:-216}}
+.lightdial{width:3.3rem;height:3.3rem;border-radius:50%;border:0;cursor:pointer;
+  background:var(--glass);color:var(--dim);display:grid;place-items:center}
+.lightdial svg{width:1.25rem;height:1.25rem}
+.lightdial.on{background:var(--accent);color:#3a2c08}
 
-.dockrow{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
-.spacer{flex:1}
+.sleepchip{display:none;padding:.65rem 1.1rem;border-radius:14px;text-align:center;
+  background:var(--glass);font-size:.82rem;font-weight:500;color:var(--dim)}
+.sleepchip b{font-weight:700;color:var(--ink)}
 
-.btn{
-  padding:.5rem .7rem;font-family:inherit;font-size:.72rem;letter-spacing:.05em;
-  background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--ink);
-  border-radius:5px;cursor:pointer;white-space:nowrap;transition:background .15s;
-}
-.btn:hover:not(:disabled){background:rgba(255,255,255,.12)}
-.btn:disabled{opacity:.3;cursor:not-allowed}
-.btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
-.btn.aux{border-color:#5a4a34}
-.btn.on{border-color:var(--amber);color:var(--amber)}
+/* Unavailable = greyed, never explained in prose.
+   night: treats and light sleep; the camera still moves.
+   taken: someone else holds the console, so everything actuating waits.
+   offline: the coop controller is unreachable. */
+body.night .ctlrow,
+body.offline .ctlrow{opacity:.35;filter:grayscale(.6);pointer-events:none}
+body.taken .ctlrow,
+body.taken .views{opacity:.4;filter:grayscale(.6);pointer-events:none}
+body.night .sleepchip{display:block}
 
-.seat{
-  font-size:.68rem;letter-spacing:.1em;color:var(--faint);
-  padding:.3rem .55rem;border:1px solid transparent;border-radius:5px;white-space:nowrap;
-  font-variant-numeric:tabular-nums;
-}
-.seat.live{color:var(--green);border-color:rgba(95,224,125,.35);background:rgba(95,224,125,.07)}
-.seat.wait{color:var(--amber);border-color:rgba(255,179,71,.3)}
-.seat.busy{color:var(--red);border-color:rgba(255,106,77,.25)}
-
-.msg{
-  font-size:.68rem;color:var(--green);min-height:1em;letter-spacing:.04em;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-}
-.msg.warn{color:var(--amber)}
-.msg.err{color:var(--red)}
-.msg:empty{display:none}
-
-/* Turnstile only becomes visible if Cloudflare actually challenges. */
+/* Turnstile renders invisibly and only pops if Cloudflare challenges. */
 .turnstile{display:flex;justify-content:center}
 .turnstile:empty,.turnstile[hidden]{display:none}
 
-/* Portrait: stack. Video at natural aspect, controls directly beneath it,
-   nothing floating over a mostly-black screen. Auto-hide is disabled here in
-   JS too: there is spare room, so hiding the dock only makes it hard to find. */
+/* ---------- portrait: stacked, nothing overlays the picture ---------- */
 @media (orientation:portrait){
-  html,body{height:auto;overflow-y:auto}
-  body{min-height:100dvh;display:flex;flex-direction:column}
-  .player{position:relative;inset:auto;width:100%;aspect-ratio:16/9;margin-top:2.6rem}
-  .stage{object-fit:contain}
-  .dock{
-    position:relative;left:auto;bottom:auto;transform:none;
-    width:calc(100% - 1rem);margin:.6rem auto;
-  }
-  /* Never fade in portrait, even if the class lands. */
-  .dock.idle{opacity:1;transform:none;pointer-events:auto}
-  .pill.idle{opacity:1}
-  .dockrow{gap:.35rem}
-  .btn{flex:1 1 auto;min-width:5.5rem;text-align:center;padding:.6rem .4rem}
-  .seat{width:100%;text-align:center}
+  body{display:flex;flex-direction:column;min-height:100dvh;overflow-x:hidden}
+  .hud{flex:1;justify-content:center}
 }
 
-/* Small landscape phones: keep the overlay layout but tighten the dock. */
-@media (orientation:landscape) and (max-height:520px){
-  .dock{bottom:.4rem;padding:.4rem .5rem;gap:.35rem}
-  .btn{padding:.4rem .5rem;font-size:.66rem}
-  .msg{font-size:.62rem}
+/* ---------- landscape / desktop / TV: full-bleed with overlay HUD ---------- */
+@media (orientation:landscape){
+  body{overflow:hidden}
+  .vidwrap{position:fixed;inset:0;z-index:0}
+  .vidwrap::before{display:none}
+  .stage-video{width:100%;height:100%;aspect-ratio:auto}
+  .fstap{right:.8rem;bottom:.8rem}
+  .hd{position:fixed;top:0;left:0;right:0;z-index:3;padding:.9rem 1.1rem 2rem;
+    background:linear-gradient(rgba(8,9,11,.55),transparent);
+    text-shadow:0 1px 6px rgba(0,0,0,.5);transition:opacity .4s}
+  .hd .livechip{text-shadow:none}
+  .hud{position:fixed;left:0;right:0;bottom:0;z-index:3;
+    padding:2.4rem 1rem .9rem;gap:.6rem;
+    background:linear-gradient(transparent,rgba(8,9,11,.66));transition:opacity .4s}
+  .views,.treatdial,.lightdial{background:var(--glass-heavy);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+  .sleepchip{background:rgba(16,18,24,.72);backdrop-filter:blur(10px);
+    -webkit-backdrop-filter:blur(10px)}
+  /* Idle: the wall TV shows only chickens. JS never applies this while the
+     visitor is mid-action. */
+  body.idle .hd,body.idle .hud{opacity:0;pointer-events:none}
 }
 
-@media (max-width:640px){
-  .pill{font-size:.62rem;top:.6rem;left:.6rem}
-}
+/* Fullscreen: the video is everything. */
+.vidwrap:fullscreen .stage-video,
+.vidwrap:-webkit-full-screen .stage-video{width:100%;height:100%;aspect-ratio:auto;object-fit:contain}
 
-/* Fullscreen: the player is the only thing on screen, so let it fill. */
-.player:fullscreen .stage,
-.player:-webkit-full-screen .stage{object-fit:contain;width:100%;height:100%}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (max-width:380px){
+  .vbtn{padding:.5rem .6rem;font-size:.72rem}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}

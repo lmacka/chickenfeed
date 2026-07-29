@@ -19,37 +19,43 @@
 </head>
 <body>
 
-<div class="player" id="player">
-  <video id="v" class="stage" autoplay muted playsinline></video>
+<header class="hd" id="hd">
+  <a class="brand" href="/">chook<b>.cam</b></a>
+  <span class="livechip"><span class="dot"></span>LIVE</span>
+  <span class="meta" id="meta"></span>
+</header>
+
+<div class="vidwrap" id="vidwrap">
+  <video id="v" class="stage-video" autoplay muted playsinline></video>
   <div class="stage-overlay" id="ov">
-    <div><b>Connecting to the coop&hellip;</b><span id="ovsub">If the chickens are asleep it will be dark. That is normal.</span></div>
+    <div><b>Connecting to the brooder&hellip;</b><span id="ovsub">If the chicks are asleep it will be dark. That is normal.</span></div>
   </div>
+  <button class="fstap" id="fs" title="Fullscreen" aria-label="Fullscreen">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>
+  </button>
 </div>
 
-<!-- Always visible, never fades fully: the reading people actually want. -->
-<div class="pill" id="pill">
-  <span class="dot" id="coopdot"></span>
-  <span id="pilltext">connecting</span>
-  <span class="sep">&middot;</span>
-  <a href="https://github.com/lmacka/chickenfeed" target="_blank" rel="noopener">github</a>
-</div>
-
-<!-- Player chrome. Fades when idle, returns on any input, and stays put while
-     the visitor holds the console so a turn is never lost to a fade. -->
-<div class="dock" id="dock">
-  <div class="dockrow">
+<div class="hud" id="hud">
+  <div class="views" id="views">
     {{range .Presets}}
-    <button class="btn ptz" data-preset="{{.Token}}">{{.Name}}</button>
+    <button class="vbtn" data-preset="{{.Token}}">{{.Name}}</button>
     {{end}}
-    <span class="spacer"></span>
-    <button class="btn aux" id="treat">&#127807; Treat</button>
-    <button class="btn aux" id="light">&#128161; Light</button>
-    <button class="btn aux" id="fs" title="Fullscreen">&#9974;</button>
-    <span class="seat" id="seat"></span>
   </div>
-  <div class="msg" id="msg"></div>
-  <!-- Managed widget: renders invisibly and only shows if Cloudflare decides to
-       challenge. Solving happens on load so the first control press is instant. -->
+  <div class="ctlrow">
+    <button class="lightdial" id="light" aria-label="Brooder light">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.8.6 1.5 1.9 1.5 2.6h4c0-.7.7-2 1.5-2.6A6 6 0 0 0 12 3z"/></svg>
+    </button>
+    <button class="treatdial" id="treat">
+      <svg class="ring" viewBox="0 0 77 77" aria-hidden="true">
+        <circle class="track" cx="38.5" cy="38.5" r="34.5"/>
+        <circle class="arc" id="arc" cx="38.5" cy="38.5" r="34.5"/>
+      </svg>
+      <span class="lbl" id="treatlbl">Treat</span>
+    </button>
+  </div>
+  <div class="sleepchip">The chicks are asleep. <b>Back at sunrise.</b></div>
+  <!-- Managed widget: renders invisibly and only shows if Cloudflare decides
+       to challenge. Solving happens on load so the first press is instant. -->
   <div class="turnstile" id="turnstile-holder">
     {{if .TurnstileKey}}<div class="cf-turnstile"
          data-sitekey="{{.TurnstileKey}}"
@@ -64,6 +70,7 @@
 (function () {
   var VIDEO_ORIGIN  = {{.VideoOrigin}};
   var VIDEO_PATH    = {{.VideoPath}};
+  var TREAT_PRESET  = {{.TreatPreset}};
   var HAS_TURNSTILE = {{if .TurnstileKey}}true{{else}}false{{end}};
 
   var $ = function (id) { return document.getElementById(id); };
@@ -71,6 +78,7 @@
   var myToken = sessionStorage.getItem(tokenKey) || '';
   var settled = false, pc = null, hls = null;
   var driving = false, busy = false;
+  var wait = 0, waitTotal = 0, ticker = null;
 
   // ---------- stream: WHEP first, HLS fallback ----------
   var v = $('v'), ov = $('ov');
@@ -123,10 +131,8 @@
   startWhep();
 
   // ---------- fullscreen ----------
-  // On a phone this is the difference between a letterboxed strip and a usable
-  // picture, so the video itself is tappable too, not just the button.
   function toggleFullscreen() {
-    var el = $('player');
+    var el = $('vidwrap');
     if (document.fullscreenElement || document.webkitFullscreenElement) {
       (document.exitFullscreen || document.webkitExitFullscreen).call(document);
       return;
@@ -134,7 +140,7 @@
     var req = el.requestFullscreen || el.webkitRequestFullscreen || v.webkitEnterFullscreen;
     if (!req) return;
     var p = req.call(req === v.webkitEnterFullscreen ? v : el);
-    // Best effort: landscape is what makes a 16:9 stream worth fullscreening.
+    // Landscape is what makes a 16:9 stream worth fullscreening on a phone.
     if (p && p.then && screen.orientation && screen.orientation.lock) {
       p.then(function () { screen.orientation.lock('landscape').catch(function () {}); })
        .catch(function () {});
@@ -142,37 +148,38 @@
   }
   $('fs').addEventListener('click', toggleFullscreen);
   v.addEventListener('dblclick', toggleFullscreen);
-  // Single tap on touch devices, where dblclick is awkward.
-  v.addEventListener('touchend', function (e) { e.preventDefault(); toggleFullscreen(); }, { passive: false });
 
-  // ---------- chrome auto-hide ----------
-  var dock = $('dock'), pill = $('pill'), idleTimer = null;
+  // ---------- landscape idle fade: the TV shows only chickens ----------
+  var idleTimer = null;
   function wake() {
-    dock.classList.remove('idle'); pill.classList.remove('idle');
+    document.body.classList.remove('idle');
     clearTimeout(idleTimer);
     if (window.matchMedia('(orientation: portrait)').matches) return;
     idleTimer = setTimeout(function () {
-      // Never fade while the visitor holds the console, or while a challenge
-      // is on screen: losing either to a timeout would feel broken.
-      if (driving || $('turnstile-holder').offsetHeight > 0) return;
-      if (dock.matches(':hover') || dock.contains(document.activeElement)) return;
-      dock.classList.add('idle'); pill.classList.add('idle');
+      // Never fade mid-action or while a challenge is on screen.
+      if (driving || busy || $('turnstile-holder').offsetHeight > 0) return;
+      var hud = $('hud');
+      if (hud.matches(':hover') || hud.contains(document.activeElement)) return;
+      document.body.classList.add('idle');
     }, 3500);
   }
   ['mousemove','mousedown','touchstart','keydown','wheel'].forEach(function (e) {
     window.addEventListener(e, wake, { passive: true });
   });
-  dock.addEventListener('mouseenter', wake);
   wake();
 
-  // ---------- console ----------
-  function say(t, cls) {
-    var m = $('msg');
-    m.textContent = t || '';
-    m.className = 'msg' + (cls ? ' ' + cls : '');
-    wake();
+  // ---------- turnstile ----------
+  // Tokens are SINGLE USE and expire after 300s. Reset after every attempt,
+  // or the next press replays a spent token and siteverify refuses it.
+  function resetTurnstile() {
+    if (window.turnstile) { try { window.turnstile.reset(); } catch (e) {} }
+  }
+  function turnstileToken() {
+    var f = document.querySelector('[name="cf-turnstile-response"]');
+    return f ? f.value : '';
   }
 
+  // ---------- console ----------
   function post(path, params) {
     var body = new URLSearchParams(params || {});
     if (myToken) body.set('token', myToken);
@@ -183,19 +190,9 @@
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); });
   }
 
-  // Turnstile tokens are SINGLE USE and expire after 300s. Reset after every
-  // attempt, or the next press replays a spent token, siteverify returns
-  // timeout-or-duplicate, and the visitor is locked out until they reload.
-  function resetTurnstile() {
-    if (window.turnstile) { try { window.turnstile.reset(); } catch (e) {} }
-  }
-  function turnstileToken() {
-    var f = document.querySelector('[name="cf-turnstile-response"]');
-    return f ? f.value : '';
-  }
-
-  // No explicit "request control" step. The seat is claimed implicitly on the
-  // first control press, so the queue only ever surfaces during contention.
+  // The seat is claimed implicitly on the first press. There is no queue
+  // prose: while someone else drives, the controls are simply greyed out by
+  // the state poll, and they come back when the seat frees.
   function ensureSeat() {
     if (driving) return Promise.resolve(true);
     var params = {};
@@ -203,107 +200,157 @@
       var t = turnstileToken();
       if (!t) {
         $('turnstile-holder').hidden = false;
-        say('confirm you are human, then press again', 'warn');
         return Promise.resolve(false);
       }
       params['cf-turnstile-response'] = t;
     }
-    say('taking the console...');
     return post('/api/queue/join', params).then(function (r) {
       resetTurnstile();
       if (!r.ok) {
-        say((r.body.error || 'refused').toLowerCase(), 'err');
         $('turnstile-holder').hidden = false;
         return false;
       }
       myToken = r.body.token;
       sessionStorage.setItem(tokenKey, myToken);
       $('turnstile-holder').hidden = true;
-      if (r.body.driving) { driving = true; return true; }
-      say('someone else is driving. you are #' + r.body.position + ' in line', 'warn');
-      return false;
+      driving = !!r.body.driving;
+      return driving;
     });
   }
 
-  function act(label, fn) {
-    if (busy) return;
-    busy = true;
-    ensureSeat().then(function (ok) {
-      if (!ok) { busy = false; refresh(); return; }
-      say(label + '...');
-      return fn().then(function (r) {
-        say(r.ok ? label + ' ok' : (r.body.error || 'failed').toLowerCase(), r.ok ? null : 'err');
-        busy = false;
-        refresh();
-      });
-    }).catch(function () { busy = false; });
+  function act(fn) {
+    if (busy) return Promise.resolve();
+    return ensureSeat().then(function (ok) {
+      if (!ok) { refresh(); return; }
+      return fn().then(function () { refresh(); });
+    }).catch(function () {});
   }
 
-  Array.prototype.forEach.call(document.querySelectorAll('.ptz'), function (b) {
+  Array.prototype.forEach.call(document.querySelectorAll('.vbtn'), function (b) {
     b.addEventListener('click', function () {
-      act(b.textContent.trim().toLowerCase(), function () {
+      act(function () {
+        markView(b.dataset.preset);
         return post('/api/ptz', { preset: b.dataset.preset });
       });
     });
   });
 
-  $('treat').addEventListener('click', function () {
-    act('treat', function () { return post('/api/treat'); });
-  });
+  function markView(token) {
+    Array.prototype.forEach.call(document.querySelectorAll('.vbtn'), function (x) {
+      x.classList.toggle('on', x.dataset.preset === token);
+    });
+  }
+
+  var treat = $('treat'), treatlbl = $('treatlbl'), arc = $('arc');
 
   $('light').addEventListener('click', function () {
     var want = $('light').classList.contains('on') ? 'off' : 'on';
-    act('light ' + want, function () { return post('/api/light', { state: want }); });
+    act(function () { return post('/api/light', { state: want }); });
+  });
+
+  treat.addEventListener('click', function () {
+    if (busy || treat.disabled) return;
+    act(function () {
+      // The server swings the camera to the feeder, settles, then dispenses;
+      // this request stays open the whole time. Show it.
+      busy = true;
+      treat.classList.add('busy');
+      treatlbl.innerHTML = 'here it<br>comes';
+      if (TREAT_PRESET) markView(TREAT_PRESET);
+      var done = function () {
+        busy = false;
+        treat.classList.remove('busy');
+      };
+      return post('/api/treat').then(done, done);
+    });
   });
 
   // ---------- state ----------
+  function fmt(sec) {
+    if (sec >= 3600) return Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm';
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function renderTreat(s) {
+    if (busy) return;
+    var st = s.coop.status, has = s.coop.has_status;
+    if (!has || !s.coop.online) {
+      treat.disabled = true;
+      treatlbl.innerHTML = 'Treat';
+      arc.style.strokeDashoffset = 216;
+      return;
+    }
+    if (!st.daylight) {
+      treat.disabled = true;
+      treatlbl.innerHTML = 'Treat<small>back at sunrise</small>';
+      arc.style.strokeDashoffset = 216;
+      return;
+    }
+    if (!st.treats_allowed && wait > 0) {
+      treat.disabled = true;
+      var sub = st.treats_remaining === 0 ? 'done for today' : 'next treat';
+      treatlbl.innerHTML = fmt(wait) + '<small>' + sub + '</small>';
+      var frac = waitTotal > 0 ? Math.max(0, Math.min(1, 1 - wait / waitTotal)) : 0;
+      arc.style.strokeDashoffset = String(216 * (1 - frac));
+      return;
+    }
+    treat.disabled = !st.treats_allowed;
+    treatlbl.innerHTML = 'Treat<small>' + st.treats_remaining + ' of ' + st.daily_quota + ' left</small>';
+    arc.style.strokeDashoffset = 0;
+  }
+
+  function tickWait() {
+    if (wait > 0) { wait--; }
+    var s = lastState;
+    if (s) renderTreat(s);
+  }
+
+  var lastState = null;
   function refresh() {
     var h = myToken ? { 'X-Control-Token': myToken } : {};
     fetch('/api/state', { headers: h }).then(function (r) { return r.json(); }).then(function (s) {
-      $('coopdot').className = 'dot ' + (s.coop.online ? 'ok' : 'bad');
-
-      var bits = [];
-      if (s.coop.has_climate) {
-        bits.push(s.coop.climate.temperature.toFixed(1) + 'C');
-        bits.push(s.coop.climate.humidity.toFixed(0) + '%');
+      lastState = s;
+      if (driving && !s.you.driving) {
+        // Turn ended. Drop the spent token: keeping it would make the next
+        // join fail the server's cooldown check for a seat we no longer hold.
+        myToken = '';
+        sessionStorage.removeItem(tokenKey);
       }
-      $('pilltext').textContent = s.coop.online ? (bits.join('  ') || 'live') : 'coop offline';
-
-      var wasDriving = driving;
       driving = s.you.driving;
 
-      if (driving) {
-        $('seat').textContent = 'yours ' + s.you.seconds_left + 's';
-        $('seat').className = 'seat live';
-        wake();
+      // header: temperature and humidity, nothing else
+      if (s.coop.online && s.coop.has_climate) {
+        $('meta').textContent = s.coop.climate.temperature.toFixed(1) + '°C · '
+          + s.coop.climate.humidity.toFixed(0) + '%';
       } else {
-        if (wasDriving) {
-          // Turn ended. Drop the spent token: keeping it would make the next
-          // press fail our own cooldown check for a seat we no longer hold.
-          myToken = '';
-          sessionStorage.removeItem(tokenKey);
-          say('turn over, press anything to queue again', 'warn');
-        }
-        if (s.you.in_queue && s.you.position > 0) {
-          $('seat').textContent = '#' + s.you.position + ' in line';
-          $('seat').className = 'seat wait';
-        } else if (s.queue.occupied) {
-          $('seat').textContent = 'in use ' + s.queue.seconds_left + 's';
-          $('seat').className = 'seat busy';
-        } else {
-          $('seat').textContent = '';
-          $('seat').className = 'seat';
-        }
+        $('meta').textContent = '';
       }
 
+      var night = s.coop.has_status && !s.coop.status.daylight;
+      document.body.classList.toggle('night', night);
+      document.body.classList.toggle('offline', !s.coop.online);
+      // Someone else has the console: everything actuating greys out.
+      document.body.classList.toggle('taken', s.queue.occupied && !s.you.driving);
+
       $('light').classList.toggle('on', s.coop.light_state === 'ON');
-      $('treat').disabled = s.coop.has_status && !s.coop.status.treats_allowed;
-      $('treat').title = ($('treat').disabled && s.coop.status.reason) || 'Dispense a treat';
+
+      // Server-computed countdown; the local ticker keeps it moving between
+      // polls and this resyncs it.
+      var w = s.treat_wait_seconds || 0;
+      if (w > 0) {
+        if (wait <= 0 || Math.abs(w - wait) > 3) wait = w;
+        if (w > waitTotal || waitTotal === 0) waitTotal = w;
+      } else {
+        wait = 0; waitTotal = 0;
+      }
+      renderTreat(s);
     }).catch(function () {});
   }
 
   refresh();
   setInterval(refresh, 2000);
+  ticker = setInterval(tickWait, 1000);
 })();
 </script>
 </body>
