@@ -15,7 +15,7 @@
 <meta name="twitter:image" content="https://chook.cam/static/screenshot-lg.png">
 <link rel="icon" type="image/webp" href="/static/favicon.webp?v={{.AssetVersion}}">
 <link rel="stylesheet" href="/static/console.css?v={{.AssetVersion}}">
-{{if .TurnstileKey}}<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>{{end}}
+{{if .TurnstileKey}}<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>{{end}}
 </head>
 <body>
 
@@ -40,6 +40,7 @@
     {{range .Presets}}
     <button class="vbtn" data-preset="{{.Token}}">{{.Name}}</button>
     {{end}}
+    <span class="recharge" id="recharge" aria-hidden="true"></span>
   </div>
   <div class="ctlrow">
     <button class="lightdial" id="light" aria-label="Brooder light">
@@ -54,15 +55,13 @@
     </button>
   </div>
   <div class="sleepchip">The chicks are asleep. <b>Back at sunrise.</b></div>
-  <!-- Managed widget: renders invisibly and only shows if Cloudflare decides
-       to challenge. Solving happens on load so the first press is instant. -->
-  <div class="turnstile" id="turnstile-holder">
-    {{if .TurnstileKey}}<div class="cf-turnstile"
-         data-sitekey="{{.TurnstileKey}}"
-         data-action="turnstile-spin-v2"
-         data-theme="dark"
-         data-size="flexible"></div>{{end}}
-  </div>
+</div>
+
+<!-- The Turnstile modal. The challenge runs invisibly on the first control
+     press; this only becomes visible if Cloudflare decides it needs the
+     visitor to interact. Most people never see it. -->
+<div class="modal" id="modal">
+  <div class="modal-card"><div id="ts-box"></div></div>
 </div>
 
 <script src="/static/hls.min.js?v={{.AssetVersion}}"></script>
@@ -71,14 +70,17 @@
   var VIDEO_ORIGIN  = {{.VideoOrigin}};
   var VIDEO_PATH    = {{.VideoPath}};
   var TREAT_PRESET  = {{.TreatPreset}};
+  var SITEKEY       = {{.TurnstileKey}};
   var HAS_TURNSTILE = {{if .TurnstileKey}}true{{else}}false{{end}};
 
   var $ = function (id) { return document.getElementById(id); };
-  var tokenKey = 'chookControlToken';
-  var myToken = sessionStorage.getItem(tokenKey) || '';
+  var sessKey = 'chookSession';
+  var sess = sessionStorage.getItem(sessKey) || '';
   var settled = false, pc = null, hls = null;
-  var driving = false, busy = false;
-  var wait = 0, waitTotal = 0, ticker = null;
+  var busy = false;
+  var treatWait = 0, treatTotal = 0;
+  var ptzWait = 0, ptzTotal = 0;
+  var lightWait = 0;
 
   // ---------- stream: WHEP first, HLS fallback ----------
   var v = $('v'), ov = $('ov');
@@ -156,8 +158,8 @@
     clearTimeout(idleTimer);
     if (window.matchMedia('(orientation: portrait)').matches) return;
     idleTimer = setTimeout(function () {
-      // Never fade mid-action or while a challenge is on screen.
-      if (driving || busy || $('turnstile-holder').offsetHeight > 0) return;
+      // Never fade mid-action or while the challenge modal is up.
+      if (busy || $('modal').classList.contains('show')) return;
       var hud = $('hud');
       if (hud.matches(':hover') || hud.contains(document.activeElement)) return;
       document.body.classList.add('idle');
@@ -168,72 +170,94 @@
   });
   wake();
 
-  // ---------- turnstile ----------
-  // Tokens are SINGLE USE and expire after 300s. Reset after every attempt,
-  // or the next press replays a spent token and siteverify refuses it.
-  function resetTurnstile() {
-    if (window.turnstile) { try { window.turnstile.reset(); } catch (e) {} }
+  // ---------- verification: one Turnstile challenge mints a session ----------
+  // The widget renders (invisibly) only when a control is first pressed. The
+  // modal appears only if Cloudflare escalates to an interactive challenge.
+  var pendingResolve = null, tsWidget = null;
+
+  function showModal() { $('modal').classList.add('show'); wake(); }
+  function hideModal() { $('modal').classList.remove('show'); }
+
+  function settleVerify(ok) {
+    hideModal();
+    var res = pendingResolve;
+    pendingResolve = null;
+    if (res) res(ok);
   }
-  function turnstileToken() {
-    var f = document.querySelector('[name="cf-turnstile-response"]');
-    return f ? f.value : '';
+
+  function startChallenge() {
+    if (!window.turnstile) { settleVerify(false); return; }
+    if (tsWidget !== null) {
+      try { window.turnstile.remove(tsWidget); } catch (e) {}
+      tsWidget = null;
+    }
+    try {
+      tsWidget = window.turnstile.render('#ts-box', {
+        sitekey: SITEKEY,
+        action: 'controls',
+        appearance: 'interaction-only',
+        'before-interactive-callback': showModal,
+        callback: function (t) {
+          post('/api/verify', { 'cf-turnstile-response': t }).then(function (r) {
+            if (r.ok && r.body.token) {
+              sess = r.body.token;
+              sessionStorage.setItem(sessKey, sess);
+              settleVerify(true);
+            } else {
+              settleVerify(false);
+            }
+          });
+        },
+        'error-callback': function () { settleVerify(false); },
+        'expired-callback': function () { settleVerify(false); }
+      });
+    } catch (e) { settleVerify(false); }
   }
+
+  function ensureVerified() {
+    if (!HAS_TURNSTILE || sess) return Promise.resolve(true);
+    if (pendingResolve) return Promise.resolve(false);
+    return new Promise(function (resolve) {
+      pendingResolve = resolve;
+      startChallenge();
+    });
+  }
+
+  // Tap outside the card dismisses the challenge.
+  $('modal').addEventListener('click', function (e) {
+    if (e.target === $('modal')) settleVerify(false);
+  });
 
   // ---------- console ----------
   function post(path, params) {
     var body = new URLSearchParams(params || {});
-    if (myToken) body.set('token', myToken);
+    if (sess) body.set('token', sess);
     return fetch(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString()
-    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); });
-  }
-
-  // The seat is claimed implicitly on the first press. There is no queue
-  // prose: while someone else drives, the controls are simply greyed out by
-  // the state poll, and they come back when the seat frees.
-  function ensureSeat() {
-    if (driving) return Promise.resolve(true);
-    var params = {};
-    if (HAS_TURNSTILE) {
-      var t = turnstileToken();
-      if (!t) {
-        $('turnstile-holder').hidden = false;
-        return Promise.resolve(false);
-      }
-      params['cf-turnstile-response'] = t;
-    }
-    return post('/api/queue/join', params).then(function (r) {
-      resetTurnstile();
-      if (!r.ok) {
-        $('turnstile-holder').hidden = false;
-        return false;
-      }
-      myToken = r.body.token;
-      sessionStorage.setItem(tokenKey, myToken);
-      $('turnstile-holder').hidden = true;
-      driving = !!r.body.driving;
-      return driving;
+    }).then(function (r) {
+      return r.json().then(
+        function (j) { return { ok: r.ok, status: r.status, body: j }; },
+        function () { return { ok: r.ok, status: r.status, body: {} }; }
+      );
     });
   }
 
   function act(fn) {
-    if (busy) return Promise.resolve();
-    return ensureSeat().then(function (ok) {
-      if (!ok) { refresh(); return; }
-      return fn().then(function () { refresh(); });
-    }).catch(function () {});
-  }
-
-  Array.prototype.forEach.call(document.querySelectorAll('.vbtn'), function (b) {
-    b.addEventListener('click', function () {
-      act(function () {
-        markView(b.dataset.preset);
-        return post('/api/ptz', { preset: b.dataset.preset });
+    return ensureVerified().then(function (ok) {
+      if (!ok) return;
+      return fn().then(function (r) {
+        // Session expired or the pod restarted: re-verify once and retry.
+        if (r && r.status === 403) {
+          sess = '';
+          sessionStorage.removeItem(sessKey);
+          return ensureVerified().then(function (ok2) { if (ok2) return fn(); });
+        }
+        return r;
       });
-    });
-  });
+    }).then(function () { refresh(); }).catch(function () {});
+  }
 
   function markView(token) {
     Array.prototype.forEach.call(document.querySelectorAll('.vbtn'), function (x) {
@@ -241,11 +265,29 @@
     });
   }
 
+  Array.prototype.forEach.call(document.querySelectorAll('.vbtn'), function (b) {
+    b.addEventListener('click', function () {
+      if (ptzWait > 0) return;
+      act(function () {
+        markView(b.dataset.preset);
+        // Optimistic lock; the server number replaces it on the next poll.
+        ptzWait = 5; ptzTotal = 5;
+        renderLocks();
+        return post('/api/ptz', { preset: b.dataset.preset });
+      });
+    });
+  });
+
   var treat = $('treat'), treatlbl = $('treatlbl'), arc = $('arc');
 
   $('light').addEventListener('click', function () {
+    if (lightWait > 0) return;
     var want = $('light').classList.contains('on') ? 'off' : 'on';
-    act(function () { return post('/api/light', { state: want }); });
+    act(function () {
+      lightWait = 5;
+      renderLocks();
+      return post('/api/light', { state: want });
+    });
   });
 
   treat.addEventListener('click', function () {
@@ -256,10 +298,11 @@
       busy = true;
       treat.classList.add('busy');
       treatlbl.innerHTML = 'here it<br>comes';
-      if (TREAT_PRESET) markView(TREAT_PRESET);
-      var done = function () {
+      if (TREAT_PRESET) { markView(TREAT_PRESET); ptzWait = 5; ptzTotal = 5; renderLocks(); }
+      var done = function (r) {
         busy = false;
         treat.classList.remove('busy');
+        return r;
       };
       return post('/api/treat').then(done, done);
     });
@@ -275,6 +318,14 @@
   function renderTreat(s) {
     if (busy) return;
     var st = s.coop.status, has = s.coop.has_status;
+    if (s.treat_busy) {
+      // Someone else's treat is mid-flight; everyone sees the dial spin.
+      treat.disabled = true;
+      treat.classList.add('busy');
+      treatlbl.innerHTML = 'here it<br>comes';
+      return;
+    }
+    treat.classList.remove('busy');
     if (!has || !s.coop.online) {
       treat.disabled = true;
       treatlbl.innerHTML = 'Treat';
@@ -287,11 +338,11 @@
       arc.style.strokeDashoffset = 216;
       return;
     }
-    if (!st.treats_allowed && wait > 0) {
+    if (!st.treats_allowed && treatWait > 0) {
       treat.disabled = true;
       var sub = st.treats_remaining === 0 ? 'done for today' : 'next treat';
-      treatlbl.innerHTML = fmt(wait) + '<small>' + sub + '</small>';
-      var frac = waitTotal > 0 ? Math.max(0, Math.min(1, 1 - wait / waitTotal)) : 0;
+      treatlbl.innerHTML = fmt(treatWait) + '<small>' + sub + '</small>';
+      var frac = treatTotal > 0 ? Math.max(0, Math.min(1, 1 - treatWait / treatTotal)) : 0;
       arc.style.strokeDashoffset = String(216 * (1 - frac));
       return;
     }
@@ -300,26 +351,38 @@
     arc.style.strokeDashoffset = 0;
   }
 
-  function tickWait() {
-    if (wait > 0) { wait--; }
-    var s = lastState;
-    if (s) renderTreat(s);
+  function renderLocks() {
+    var views = $('views');
+    views.classList.toggle('cooling', ptzWait > 0);
+    var p = ptzTotal > 0 ? Math.max(0, Math.min(1, 1 - ptzWait / ptzTotal)) : 0;
+    $('recharge').style.transform = 'scaleX(' + p + ')';
+    $('light').classList.toggle('cooling', lightWait > 0);
   }
 
   var lastState = null;
-  function refresh() {
-    var h = myToken ? { 'X-Control-Token': myToken } : {};
-    fetch('/api/state', { headers: h }).then(function (r) { return r.json(); }).then(function (s) {
-      lastState = s;
-      if (driving && !s.you.driving) {
-        // Turn ended. Drop the spent token: keeping it would make the next
-        // join fail the server's cooldown check for a seat we no longer hold.
-        myToken = '';
-        sessionStorage.removeItem(tokenKey);
-      }
-      driving = s.you.driving;
+  function tick() {
+    if (treatWait > 0) treatWait--;
+    if (ptzWait > 0) ptzWait--;
+    if (lightWait > 0) lightWait--;
+    if (lastState) renderTreat(lastState);
+    renderLocks();
+  }
 
-      // header: temperature and humidity, nothing else
+  function merge(server, local, total) {
+    // Trust the server, but keep the local ticker smooth between polls.
+    if (server > 0) {
+      if (local <= 0 || Math.abs(server - local) > 3) local = server;
+      if (server > total || total === 0) total = server;
+    } else {
+      local = 0; total = 0;
+    }
+    return [local, total];
+  }
+
+  function refresh() {
+    fetch('/api/state').then(function (r) { return r.json(); }).then(function (s) {
+      lastState = s;
+
       if (s.coop.online && s.coop.has_climate) {
         $('meta').textContent = s.coop.climate.temperature.toFixed(1) + '°C · '
           + s.coop.climate.humidity.toFixed(0) + '%';
@@ -330,27 +393,23 @@
       var night = s.coop.has_status && !s.coop.status.daylight;
       document.body.classList.toggle('night', night);
       document.body.classList.toggle('offline', !s.coop.online);
-      // Someone else has the console: everything actuating greys out.
-      document.body.classList.toggle('taken', s.queue.occupied && !s.you.driving);
 
       $('light').classList.toggle('on', s.coop.light_state === 'ON');
 
-      // Server-computed countdown; the local ticker keeps it moving between
-      // polls and this resyncs it.
-      var w = s.treat_wait_seconds || 0;
-      if (w > 0) {
-        if (wait <= 0 || Math.abs(w - wait) > 3) wait = w;
-        if (w > waitTotal || waitTotal === 0) waitTotal = w;
-      } else {
-        wait = 0; waitTotal = 0;
-      }
+      var m = merge(s.treat_wait_seconds || 0, treatWait, treatTotal);
+      treatWait = m[0]; treatTotal = m[1];
+      m = merge(s.ptz_wait_seconds || 0, ptzWait, ptzTotal);
+      ptzWait = m[0]; ptzTotal = m[1];
+      lightWait = Math.max(s.light_wait_seconds || 0, 0);
+
       renderTreat(s);
+      renderLocks();
     }).catch(function () {});
   }
 
   refresh();
   setInterval(refresh, 2000);
-  ticker = setInterval(tickWait, 1000);
+  setInterval(tick, 1000);
 })();
 </script>
 </body>

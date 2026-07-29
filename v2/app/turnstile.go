@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// Turnstile guards entry to the control queue, not individual button presses.
-// One check per visitor, and holding the seat is what limits what they can do
-// after that.
+// Turnstile guards session minting (/api/verify), not individual button
+// presses. One check per visitor per session TTL; the global rate limits
+// bound what a verified visitor can do after that.
 //
 // Server-side siteverify is mandatory: the client token proves nothing on its
 // own. Tokens are single-use and expire after 300s.

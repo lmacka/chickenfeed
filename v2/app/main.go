@@ -9,9 +9,12 @@
 //
 // Deliberately absent, compared to the retired chook-server:
 //   - chat. It carried stored XSS on both render paths and a moderation burden.
-//   - SSE. With chat gone the only live data is sensors, health and the queue,
-//     which polls fine. The old page also opened /events twice.
-//   - per-endpoint rate limiting. The control queue does that job structurally.
+//   - SSE. The only live data is sensors, health and shared cooldowns, which
+//     poll fine. The old page also opened /events twice.
+//   - the control queue. Global rate limits are the abuse model now: the
+//     hardware has one shared budget and every visitor sees the same
+//     countdowns. Turnstile mints a session on the first press instead of
+//     guarding a seat.
 //
 // Video is NOT served here. It comes from video.chook.cam, off the Cloudflare
 // proxy, because the CDN terms bar serving video on this plan.
@@ -27,6 +30,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -35,11 +39,16 @@ import (
 )
 
 type App struct {
-	queue     *Queue
 	coop      *Coop
 	ptz       *PTZ
 	turnstile *Turnstile
+	sessions  *Sessions
+	ptzLimit  *Limiter
+	lightLimit *Limiter
 	tmpl      *template.Template
+
+	treatMu   sync.Mutex
+	treatBusy bool
 
 	videoOrigin  string
 	videoPath    string
@@ -58,20 +67,14 @@ type Preset struct {
 }
 
 var (
-	metricQueueWaiting = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "chookapp_queue_waiting", Help: "Visitors waiting for the console.",
-	})
-	metricQueueOccupied = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "chookapp_queue_occupied", Help: "1 when someone holds the console.",
-	})
-	metricTurns = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "chookapp_turns_total", Help: "Control turns handed out.",
-	})
 	metricCommands = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "chookapp_commands_total", Help: "Commands issued, by kind and outcome.",
 	}, []string{"kind", "result"})
 	metricCoopOnline = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "chookapp_coop_online", Help: "1 when the coop controller reports online over MQTT.",
+	})
+	metricSessions = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "chookapp_sessions_total", Help: "Turnstile-verified control sessions minted.",
 	})
 )
 
@@ -96,13 +99,11 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 	log.SetPrefix("chook-app ")
 
-	turn := time.Duration(envInt("QUEUE_TURN_SECONDS", 30)) * time.Second
-	cooldown := time.Duration(envInt("QUEUE_COOLDOWN_SECONDS", 60)) * time.Second
-	reap := time.Duration(envInt("QUEUE_REAP_SECONDS", 20)) * time.Second
-
 	app := &App{
-		queue:        NewQueue(turn, cooldown, reap),
 		turnstile:    NewTurnstile(os.Getenv("TURNSTILE_SECRET")),
+		sessions:     NewSessions(time.Duration(envInt("SESSION_TTL_HOURS", 12)) * time.Hour),
+		ptzLimit:     NewLimiter(time.Duration(envInt("PTZ_COOLDOWN_SECONDS", 5))*time.Second, envInt("PTZ_MOVES_PER_MINUTE", 6)),
+		lightLimit:   NewLimiter(time.Duration(envInt("LIGHT_COOLDOWN_SECONDS", 5))*time.Second, 0),
 		videoOrigin:  env("VIDEO_ORIGIN", "https://video.chook.cam"),
 		videoPath:    env("VIDEO_PATH", "coop"),
 		turnstileKey: os.Getenv("TURNSTILE_SITEKEY"),
@@ -185,14 +186,14 @@ func main() {
 	mux.Handle("/metrics", promhttp.Handler())
 
 	mux.HandleFunc("/api/state", app.handleState)
-	mux.HandleFunc("/api/queue/join", app.handleJoin)
-	mux.HandleFunc("/api/queue/release", app.handleRelease)
+	mux.HandleFunc("/api/verify", app.handleVerify)
 	mux.HandleFunc("/api/treat", app.handleTreat)
 	mux.HandleFunc("/api/light", app.handleLight)
 	mux.HandleFunc("/api/ptz", app.handlePTZ)
 
-	// The retired chook-server's endpoints are gone, not merely moved.
-	for _, p := range []string{"/events", "/chat/send", "/chat/history"} {
+	// Retired endpoints are gone, not merely moved. The queue joined them
+	// when global limits replaced it.
+	for _, p := range []string{"/events", "/chat/send", "/chat/history", "/api/queue/join", "/api/queue/release"} {
 		mux.HandleFunc(p, func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "gone", http.StatusGone)
 		})
@@ -215,13 +216,6 @@ func main() {
 
 func (a *App) metricsLoop() {
 	for range time.Tick(5 * time.Second) {
-		s := a.queue.Snapshot()
-		metricQueueWaiting.Set(float64(s.Waiting))
-		if s.Occupied {
-			metricQueueOccupied.Set(1)
-		} else {
-			metricQueueOccupied.Set(0)
-		}
 		if a.coop.View().Online {
 			metricCoopOnline.Set(1)
 		} else {
@@ -267,7 +261,6 @@ type pageData struct {
 	VideoPath    string
 	TurnstileKey string
 	Presets      []Preset
-	TurnSeconds  int
 	AssetVersion string
 	TreatPreset  string
 }
@@ -287,7 +280,6 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 		VideoPath:    a.videoPath,
 		TurnstileKey: a.turnstileKey,
 		Presets:      a.presets,
-		TurnSeconds:  int(a.queue.turn.Seconds()),
 		AssetVersion: a.assetVersion,
 		TreatPreset:  a.treatPreset,
 	}); err != nil {
@@ -305,20 +297,15 @@ func (a *App) handleHealth(w http.ResponseWriter, _ *http.Request) {
 }
 
 type stateResp struct {
-	Queue     QueueSnapshot `json:"queue"`
-	Coop      CoopView      `json:"coop"`
-	You       youState      `json:"you"`
-	VideoBase string        `json:"video_base"`
-	// Seconds until the next treat is allowed, computed here so client clock
-	// skew cannot skew the countdown. 0 when allowed or unknown.
-	TreatWait int `json:"treat_wait_seconds"`
-}
-
-type youState struct {
-	Driving     bool `json:"driving"`
-	Position    int  `json:"position"`
-	SecondsLeft int  `json:"seconds_left"`
-	InQueue     bool `json:"in_queue"`
+	Coop      CoopView `json:"coop"`
+	VideoBase string   `json:"video_base"`
+	// Waits are seconds until each control is next allowed, computed here so
+	// client clock skew cannot skew the countdowns, and shared so every
+	// visitor's page greys and recovers in sync. 0 means go ahead.
+	TreatWait int  `json:"treat_wait_seconds"`
+	PtzWait   int  `json:"ptz_wait_seconds"`
+	LightWait int  `json:"light_wait_seconds"`
+	TreatBusy bool `json:"treat_busy"`
 }
 
 func treatWaitSeconds(v CoopView) int {
@@ -336,25 +323,25 @@ func treatWaitSeconds(v CoopView) int {
 	return int(d.Seconds())
 }
 
-func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
-	tok := token(r)
-	driving, pos, left, _ := a.queue.Status(tok)
+func (a *App) handleState(w http.ResponseWriter, _ *http.Request) {
+	now := time.Now()
 	view := a.coop.View()
+	a.treatMu.Lock()
+	busy := a.treatBusy
+	a.treatMu.Unlock()
 	writeJSON(w, http.StatusOK, stateResp{
-		Queue:     a.queue.Snapshot(),
 		Coop:      view,
 		TreatWait: treatWaitSeconds(view),
-		You: youState{
-			Driving:     driving,
-			Position:    pos,
-			SecondsLeft: left,
-			InQueue:     pos >= 0,
-		},
+		PtzWait:   a.ptzLimit.WaitSeconds(now),
+		LightWait: a.lightLimit.WaitSeconds(now),
+		TreatBusy: busy,
 		VideoBase: a.videoOrigin + "/" + a.videoPath,
 	})
 }
 
-func (a *App) handleJoin(w http.ResponseWriter, r *http.Request) {
+// handleVerify swaps a solved Turnstile challenge for a signed session token.
+// This happens once per visitor (per session TTL), on their first press.
+func (a *App) handleVerify(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -363,56 +350,45 @@ func (a *App) handleJoin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": why})
 		return
 	}
-	if prev := token(r); prev != "" && a.queue.InCooldown(prev) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{
-			"error": "you just had a turn, give someone else a go",
-		})
-		return
-	}
-
-	name := strings.TrimSpace(r.FormValue("name"))
-	if name == "" {
-		name = "someone"
-	}
-	if len(name) > 20 {
-		name = name[:20]
-	}
-
-	res := a.queue.Join(name)
-	if res.Driving {
-		metricTurns.Inc()
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"token":    res.Token,
-		"driving":  res.Driving,
-		"position": res.Position,
-	})
+	metricSessions.Inc()
+	writeJSON(w, http.StatusOK, map[string]string{"token": a.sessions.Mint(time.Now())})
 }
 
-func (a *App) handleRelease(w http.ResponseWriter, r *http.Request) {
-	a.queue.Release(token(r))
-	writeJSON(w, http.StatusOK, map[string]string{"status": "released"})
-}
-
-// requireSeat is the single gate between a request and the hardware.
-func (a *App) requireSeat(w http.ResponseWriter, r *http.Request) bool {
+// requireSession is the single gate between a request and the hardware. With
+// Turnstile configured, every actuating request must carry a session token
+// minted by /api/verify; without it the app runs open (local development).
+func (a *App) requireSession(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return false
 	}
-	if !a.queue.Holds(token(r)) {
-		writeJSON(w, http.StatusForbidden, map[string]string{
-			"error": "you do not have the console right now",
-		})
+	if a.turnstile.Enabled() && !a.sessions.Valid(token(r), time.Now()) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "verification required"})
 		return false
 	}
 	return true
 }
 
 func (a *App) handleTreat(w http.ResponseWriter, r *http.Request) {
-	if !a.requireSeat(w, r) {
+	if !a.requireSession(w, r) {
 		return
 	}
+	// Single-flight: one treat sequence at a time, globally. A second press
+	// while the camera is swinging would double-dispense or cut the swing.
+	a.treatMu.Lock()
+	if a.treatBusy {
+		a.treatMu.Unlock()
+		metricCommands.WithLabelValues("treat", "busy").Inc()
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "a treat is already on its way"})
+		return
+	}
+	a.treatBusy = true
+	a.treatMu.Unlock()
+	defer func() {
+		a.treatMu.Lock()
+		a.treatBusy = false
+		a.treatMu.Unlock()
+	}()
 	// Report chicky's own refusal reason rather than guessing here. The device
 	// is authoritative; this is a courtesy so the UI can say why.
 	if v := a.coop.View(); v.HasStatus && !v.Status.TreatsAllowed {
@@ -422,8 +398,11 @@ func (a *App) handleTreat(w http.ResponseWriter, r *http.Request) {
 	}
 	// Swing the camera to the feeder before dispensing so the viewer watches
 	// the treat land. A PTZ failure logs and dispenses anyway: the chicken
-	// getting the treat matters more than the shot.
+	// getting the treat matters more than the shot. The swing is recorded
+	// against the shared PTZ budget so view presses cannot yank the camera
+	// away while the treat lands.
 	if a.treatPreset != "" {
+		a.ptzLimit.Force(time.Now())
 		if err := a.ptz.GotoPreset(a.treatPreset); err != nil {
 			log.Printf("treat: feeder swing failed: %v", err)
 		} else {
@@ -440,7 +419,12 @@ func (a *App) handleTreat(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleLight(w http.ResponseWriter, r *http.Request) {
-	if !a.requireSeat(w, r) {
+	if !a.requireSession(w, r) {
+		return
+	}
+	if !a.lightLimit.Try(time.Now()) {
+		metricCommands.WithLabelValues("light", "limited").Inc()
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "the light needs a moment"})
 		return
 	}
 	on := r.FormValue("state") != "off"
@@ -454,7 +438,7 @@ func (a *App) handleLight(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handlePTZ(w http.ResponseWriter, r *http.Request) {
-	if !a.requireSeat(w, r) {
+	if !a.requireSession(w, r) {
 		return
 	}
 	want := r.FormValue("preset")
@@ -470,6 +454,11 @@ func (a *App) handlePTZ(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		metricCommands.WithLabelValues("ptz", "invalid").Inc()
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown preset"})
+		return
+	}
+	if !a.ptzLimit.Try(time.Now()) {
+		metricCommands.WithLabelValues("ptz", "limited").Inc()
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "the camera needs a moment"})
 		return
 	}
 	if err := a.ptz.GotoPreset(want); err != nil {

@@ -71,8 +71,16 @@ body.night .vidwrap::before{opacity:.12}
 /* ---------- HUD ---------- */
 .hud{display:flex;flex-direction:column;gap:.8rem;align-items:center;
   padding:1rem 1rem 1.2rem}
-.views{display:flex;gap:.3rem;padding:.28rem;border-radius:999px;background:var(--glass);
-  max-width:100%;overflow-x:auto}
+.views{position:relative;display:flex;gap:.3rem;padding:.28rem;border-radius:999px;
+  background:var(--glass);max-width:100%;overflow-x:auto}
+/* Shared PTZ lock: buttons grey, and a thin line refills as the camera's
+   budget recovers, so a long lock reads as "coming back", not broken. */
+.views.cooling .vbtn{opacity:.35;filter:grayscale(.6);pointer-events:none}
+.recharge{position:absolute;left:1rem;right:1rem;bottom:1px;height:2px;
+  border-radius:2px;background:var(--accent);transform-origin:left;
+  transform:scaleX(0);opacity:0;transition:transform 1s linear}
+.views.cooling .recharge{opacity:.8}
+.lightdial.cooling{opacity:.4;pointer-events:none;filter:grayscale(.6)}
 .vbtn{border:0;border-radius:999px;padding:.5rem .85rem;cursor:pointer;
   font-family:inherit;font-size:.78rem;font-weight:500;color:var(--dim);
   background:transparent;white-space:nowrap}
@@ -107,17 +115,21 @@ body.night .vidwrap::before{opacity:.12}
 
 /* Unavailable = greyed, never explained in prose.
    night: treats and light sleep; the camera still moves.
-   taken: someone else holds the console, so everything actuating waits.
    offline: the coop controller is unreachable. */
 body.night .ctlrow,
 body.offline .ctlrow{opacity:.35;filter:grayscale(.6);pointer-events:none}
-body.taken .ctlrow,
-body.taken .views{opacity:.4;filter:grayscale(.6);pointer-events:none}
 body.night .sleepchip{display:block}
 
-/* Turnstile renders invisibly and only pops if Cloudflare challenges. */
-.turnstile{display:flex;justify-content:center}
-.turnstile:empty,.turnstile[hidden]{display:none}
+/* The Turnstile modal. Kept in layout (visibility, not display) so the
+   widget can render invisibly; .show only happens if Cloudflare actually
+   challenges. */
+.modal{position:fixed;inset:0;z-index:50;display:flex;align-items:center;
+  justify-content:center;background:rgba(8,9,11,.65);
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  opacity:0;visibility:hidden;transition:opacity .25s}
+.modal.show{opacity:1;visibility:visible}
+.modal-card{background:#1a1d22;border-radius:16px;padding:1.1rem;
+  box-shadow:0 18px 50px rgba(0,0,0,.5)}
 
 /* ---------- portrait: stacked, nothing overlays the picture ---------- */
 @media (orientation:portrait){
