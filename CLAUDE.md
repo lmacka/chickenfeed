@@ -53,10 +53,22 @@ cannot overfeed the chickens.
 
 ## Access control
 
-One visitor holds the console at a time for a 30 second turn, then a 60 second cooldown. Every
-actuating endpoint is gated on `queue.Holds(token)`. Turnstile is verified server-side on
-`/api/queue/join` only; its tokens are single use, so the widget must be reset after every join.
-There is deliberately no per-endpoint rate limiter: the single seat is the limiter.
+Global rate limits, shared by all visitors, are the abuse model: PTZ has a 5 second cooldown
+plus 6 moves per minute (the treat's feeder swing counts against it), the light a 5 second
+cooldown, and treats are single-flight. `/api/state` serves the shared countdowns so every
+client greys and recovers in sync. There is no per-visitor seat or queue; `/api/queue/*`
+returns 410.
+
+Turnstile mints the control session: the first press calls `/api/verify`, which swaps a
+solved challenge for an HMAC-signed 12 hour token that every actuating request must carry.
+The signing key is random per process, so a restart silently re-verifies visitors.
+Turnstile tokens are single use; the widget must be re-rendered per attempt.
+
+## TODO discipline
+
+`TODO.md` at the repo root is the running work list. When a task, gap, or "later" item
+surfaces during any session, add it there in the same commit rather than leaving it in chat
+or a commit message. Remove items when done.
 
 ## Commands
 

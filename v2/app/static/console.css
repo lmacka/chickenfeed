@@ -120,16 +120,35 @@ body.night .ctlrow,
 body.offline .ctlrow{opacity:.35;filter:grayscale(.6);pointer-events:none}
 body.night .sleepchip{display:block}
 
-/* The Turnstile modal. Kept in layout (visibility, not display) so the
-   widget can render invisibly; .show only happens if Cloudflare actually
-   challenges. */
+/* Until verified, controls are dimmed: the first press verifies, it does not
+   act, and this makes that read as "not awake yet" rather than broken. */
+body.unverified .vbtn,
+body.unverified .treatdial,
+body.unverified .lightdial{opacity:.55}
+/* Verification done: one pulse to say the controls just woke up. */
+.hud.pulse .vbtn,.hud.pulse .treatdial,.hud.pulse .lightdial{
+  animation:wakepulse .6s ease}
+@keyframes wakepulse{
+  0%{transform:scale(1)}
+  35%{transform:scale(1.07);filter:brightness(1.35)}
+  100%{transform:scale(1)}
+}
+
+/* The verification modal. Kept in layout (visibility, not display) so the
+   Turnstile widget can render inside it before it is shown. */
 .modal{position:fixed;inset:0;z-index:50;display:flex;align-items:center;
   justify-content:center;background:rgba(8,9,11,.65);
   backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
   opacity:0;visibility:hidden;transition:opacity .25s}
 .modal.show{opacity:1;visibility:visible}
-.modal-card{background:#1a1d22;border-radius:16px;padding:1.1rem;
-  box-shadow:0 18px 50px rgba(0,0,0,.5)}
+.modal-card{background:#1a1d22;border-radius:16px;padding:1.3rem 1.6rem;
+  box-shadow:0 18px 50px rgba(0,0,0,.5);min-width:14rem}
+.spin{width:1.7rem;height:1.7rem;margin:0 auto .65rem;border-radius:50%;
+  border:3px solid rgba(255,255,255,.18);border-top-color:var(--accent);
+  animation:rot 1s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+.modal-msg{font-size:.85rem;font-weight:500;color:var(--dim);text-align:center}
+#verifying[hidden]{display:none}
 
 /* ---------- portrait: stacked, nothing overlays the picture ---------- */
 @media (orientation:portrait){
@@ -144,13 +163,21 @@ body.night .sleepchip{display:block}
   .vidwrap::before{display:none}
   .stage-video{width:100%;height:100%;aspect-ratio:auto}
   .fstap{right:.8rem;bottom:.8rem}
+  /* The gradients are padding on fixed overlays, so without this their empty
+     area sits over the video's corners and eats clicks meant for the
+     fullscreen button underneath (fstap lives in the video's own stacking
+     context and cannot out-z-index them). */
   .hd{position:fixed;top:0;left:0;right:0;z-index:3;padding:.9rem 1.1rem 2rem;
     background:linear-gradient(rgba(8,9,11,.55),transparent);
-    text-shadow:0 1px 6px rgba(0,0,0,.5);transition:opacity .4s}
+    text-shadow:0 1px 6px rgba(0,0,0,.5);transition:opacity .4s;
+    pointer-events:none}
+  .hd .brand{pointer-events:auto}
   .hd .livechip{text-shadow:none}
   .hud{position:fixed;left:0;right:0;bottom:0;z-index:3;
     padding:2.4rem 1rem .9rem;gap:.6rem;
-    background:linear-gradient(transparent,rgba(8,9,11,.66));transition:opacity .4s}
+    background:linear-gradient(transparent,rgba(8,9,11,.66));transition:opacity .4s;
+    pointer-events:none}
+  .hud > *{pointer-events:auto}
   .views,.treatdial,.lightdial{background:var(--glass-heavy);
     backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
   .sleepchip{background:rgba(16,18,24,.72);backdrop-filter:blur(10px);

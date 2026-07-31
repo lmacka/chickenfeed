@@ -57,11 +57,18 @@
   <div class="sleepchip">The chicks are asleep. <b>Back at sunrise.</b></div>
 </div>
 
-<!-- The Turnstile modal. The challenge runs invisibly on the first control
-     press; this only becomes visible if Cloudflare decides it needs the
-     visitor to interact. Most people never see it. -->
+<!-- The verification modal. The first control press opens it with a spinner
+     while Turnstile runs; if Cloudflare escalates to an interactive
+     challenge, the widget replaces the spinner in place. On success the
+     modal closes and the controls pulse awake. -->
 <div class="modal" id="modal">
-  <div class="modal-card"><div id="ts-box"></div></div>
+  <div class="modal-card">
+    <div id="verifying">
+      <div class="spin"></div>
+      <div class="modal-msg">Ensuring humanity&hellip;</div>
+    </div>
+    <div id="ts-box"></div>
+  </div>
 </div>
 
 <script src="/static/hls.min.js?v={{.AssetVersion}}"></script>
@@ -171,17 +178,27 @@
   wake();
 
   // ---------- verification: one Turnstile challenge mints a session ----------
-  // The widget renders (invisibly) only when a control is first pressed. The
-  // modal appears only if Cloudflare escalates to an interactive challenge.
-  var pendingResolve = null, tsWidget = null;
+  // Until verified the controls are dimmed and the first press only verifies:
+  // it opens the modal with a spinner, and if Cloudflare escalates to an
+  // interactive challenge the widget replaces the spinner in place. On
+  // success the modal closes, the controls pulse awake, and presses act.
+  var pendingResolve = null, tsWidget = null, verifyDeadline = null;
+  if (HAS_TURNSTILE && !sess) document.body.classList.add('unverified');
 
   function showModal() { $('modal').classList.add('show'); wake(); }
   function hideModal() { $('modal').classList.remove('show'); }
 
   function settleVerify(ok) {
+    clearTimeout(verifyDeadline);
     hideModal();
     var res = pendingResolve;
     pendingResolve = null;
+    if (ok && document.body.classList.contains('unverified')) {
+      document.body.classList.remove('unverified');
+      var hud = $('hud');
+      hud.classList.add('pulse');
+      setTimeout(function () { hud.classList.remove('pulse'); }, 800);
+    }
     if (res) res(ok);
   }
 
@@ -196,7 +213,10 @@
         sitekey: SITEKEY,
         action: 'controls',
         appearance: 'interaction-only',
-        'before-interactive-callback': showModal,
+        'before-interactive-callback': function () {
+          // Cloudflare wants the visitor: swap the spinner for the widget.
+          $('verifying').hidden = true;
+        },
         callback: function (t) {
           post('/api/verify', { 'cf-turnstile-response': t }).then(function (r) {
             if (r.ok && r.body.token) {
@@ -219,6 +239,11 @@
     if (pendingResolve) return Promise.resolve(false);
     return new Promise(function (resolve) {
       pendingResolve = resolve;
+      $('verifying').hidden = false;
+      showModal();
+      // If Turnstile never comes back (blocked script, dead network), do not
+      // leave a spinner up forever.
+      verifyDeadline = setTimeout(function () { settleVerify(false); }, 20000);
       startChallenge();
     });
   }
@@ -245,6 +270,12 @@
   }
 
   function act(fn) {
+    // The first press of a session only verifies. Firing the action too
+    // would actuate hardware from a press made before the visitor could see
+    // the controls were live.
+    if (HAS_TURNSTILE && !sess) {
+      return ensureVerified().then(function () { refresh(); });
+    }
     return ensureVerified().then(function (ok) {
       if (!ok) return;
       return fn().then(function (r) {
@@ -385,7 +416,7 @@
 
       if (s.coop.online && s.coop.has_climate) {
         $('meta').textContent = s.coop.climate.temperature.toFixed(1) + '°C · '
-          + s.coop.climate.humidity.toFixed(0) + '%';
+          + Math.round(s.coop.climate.light) + ' lx';
       } else {
         $('meta').textContent = '';
       }
