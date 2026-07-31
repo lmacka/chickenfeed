@@ -89,6 +89,11 @@ s5 = SafetyEnvelope(relay=None)
 s5.daylight_only = True
 s5.treat_cooldown = 0
 s5._dispense_count = 0
+# Isolate the daylight rule. The constructor loads the state file, which
+# holds a recent dispense from the quota section above; with pacing on that
+# blocks in broad daylight and this check fails during AEST daytime only.
+s5.treat_paced = False
+s5._last_dispense = None
 allowed, reason = s5.can_dispense()
 is_day = s5.is_daylight()
 check("daylight gate agrees with can_dispense", allowed == is_day or not is_day,
