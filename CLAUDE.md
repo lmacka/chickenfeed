@@ -36,6 +36,14 @@ Do not add anything that requires an inbound path to the coop VLAN.
   `mediamtx.yml`, which is gitignored, with `mediamtx.yml.example` committed beside it.
 - **Defining `authInternalUsers` replaces the mediamtx defaults**, including the localhost-only
   metrics user. Re-add what you still need.
+- **`srtPublishPassphrase` does not gate publishing.** It covers the SRT ingest only. WHIP
+  (WebRTC publish) is a separate door onto the same path, and mediamtx defaults to
+  `overridePublisher`, so granting `action: publish` to `user: any` lets anyone evict the real
+  feed and serve their own video. Publish needs its own credentialled entry. Auth is consulted
+  for `AuthActionPublish` *before* the passphrase check, so the legitimate publisher depends on
+  that entry too.
+- **Restarting mediamtx alone 502s the site.** It gets a new docker-bridge IP and nginx has the
+  old one cached from startup, so `swag` has to be restarted after it.
 - **The VPS cannot fetch from GitHub** (no deploy key). `git reset --hard origin/main` there walks
   the working tree backwards to a stale ref and deletes the live compose and nginx config. It has
   bitten twice. Push to a temp ref from the workstation and reset onto that.

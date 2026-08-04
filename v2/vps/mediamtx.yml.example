@@ -49,13 +49,30 @@ metricsAddress: :9998
 # action from 127.0.0.1, which nginx (on the docker bridge) is not, so the
 # scrape 401'd until the bridge was added.
 authInternalUsers:
-  # Public viewers. Publishing is gated separately by srtPublishPassphrase,
-  # and only the 'coop' path exists, so an unknown path is refused anyway.
+  # Reading is public: this is a public livestream.
+  #
+  # Publishing is NOT, and must never be granted to 'any'. srtPublishPassphrase
+  # does NOT gate it: the passphrase applies only to the SRT ingest, while WHIP
+  # (WebRTC publish) is a separate door onto the same path, and mediamtx
+  # defaults to overridePublisher. Granting publish to 'any' lets a stranger
+  # POST to /<path>/whip, evict the real feed, and serve their own video from
+  # this domain.
+  #
+  # mediamtx consults auth for AuthActionPublish BEFORE checking the SRT
+  # passphrase, so the real publisher depends on the entry below. Do not merge
+  # these two back together.
   - user: any
     pass:
     permissions:
-      - action: publish
       - action: read
+
+  # The publisher. Credentials ride in the SRT streamid
+  # (#!::m=publish,r=coop,u=...,s=...); note the password key is 's', not 'p'.
+  - user: publisher
+    pass: CHANGEME
+    permissions:
+      - action: publish
+        path: coop
   # Metrics scrape, reachable only from localhost and the docker bridge.
   # nginx puts HTTP basic auth in front of it before it reaches the internet.
   - user: any
