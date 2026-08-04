@@ -43,6 +43,7 @@ type App struct {
 	ptz       *PTZ
 	turnstile *Turnstile
 	sessions  *Sessions
+	viewers   *Viewers
 	ptzLimit  *Limiter
 	lightLimit *Limiter
 	tmpl      *template.Template
@@ -76,6 +77,9 @@ var (
 	metricSessions = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "chookapp_sessions_total", Help: "Turnstile-verified control sessions minted.",
 	})
+	metricViewers = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "chookapp_viewers", Help: "Live stream readers reported by the video origin (WebRTC + HLS).",
+	})
 )
 
 func env(k, def string) string {
@@ -102,6 +106,7 @@ func main() {
 	app := &App{
 		turnstile:    NewTurnstile(os.Getenv("TURNSTILE_SECRET")),
 		sessions:     NewSessions(time.Duration(envInt("SESSION_TTL_HOURS", 12)) * time.Hour),
+		viewers:      NewViewers(os.Getenv("VIDEO_METRICS_URL"), os.Getenv("VIDEO_METRICS_USER"), os.Getenv("VIDEO_METRICS_PASS")),
 		ptzLimit:     NewLimiter(time.Duration(envInt("PTZ_COOLDOWN_SECONDS", 5))*time.Second, envInt("PTZ_MOVES_PER_MINUTE", 6)),
 		lightLimit:   NewLimiter(time.Duration(envInt("LIGHT_COOLDOWN_SECONDS", 5))*time.Second, 0),
 		videoOrigin:  env("VIDEO_ORIGIN", "https://video.chook.cam"),
@@ -168,6 +173,12 @@ func main() {
 	defer app.coop.Close()
 
 	go app.metricsLoop()
+
+	if app.viewers.Enabled() {
+		go app.viewers.Run(time.Duration(envInt("VIEWERS_POLL_SECONDS", 5)) * time.Second)
+	} else {
+		log.Printf("viewers: VIDEO_METRICS_URL unset, viewer count disabled")
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", app.handleIndex)
@@ -306,6 +317,10 @@ type stateResp struct {
 	PtzWait   int  `json:"ptz_wait_seconds"`
 	LightWait int  `json:"light_wait_seconds"`
 	TreatBusy bool `json:"treat_busy"`
+	// Viewers is the live reader count from the video origin. null when the
+	// origin has not answered recently (or polling is disabled), so the UI
+	// hides the indicator rather than showing a number nobody stands behind.
+	Viewers *int `json:"viewers"`
 }
 
 func treatWaitSeconds(v CoopView) int {
@@ -329,12 +344,17 @@ func (a *App) handleState(w http.ResponseWriter, _ *http.Request) {
 	a.treatMu.Lock()
 	busy := a.treatBusy
 	a.treatMu.Unlock()
+	var viewers *int
+	if n, ok := a.viewers.Current(); ok {
+		viewers = &n
+	}
 	writeJSON(w, http.StatusOK, stateResp{
 		Coop:      view,
 		TreatWait: treatWaitSeconds(view),
 		PtzWait:   a.ptzLimit.WaitSeconds(now),
 		LightWait: a.lightLimit.WaitSeconds(now),
 		TreatBusy: busy,
+		Viewers:   viewers,
 		VideoBase: a.videoOrigin + "/" + a.videoPath,
 	})
 }

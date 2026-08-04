@@ -414,12 +414,14 @@
     fetch('/api/state').then(function (r) { return r.json(); }).then(function (s) {
       lastState = s;
 
+      var parts = [];
       if (s.coop.online && s.coop.has_climate) {
-        $('meta').textContent = s.coop.climate.temperature.toFixed(1) + '°C · '
-          + Math.round(s.coop.climate.light) + ' lx';
-      } else {
-        $('meta').textContent = '';
+        parts.push(s.coop.climate.temperature.toFixed(1) + '°C');
+        parts.push(Math.round(s.coop.climate.light) + ' lx');
       }
+      // null means the video origin is not answering; hide rather than lie.
+      if (s.viewers != null) parts.push('👁️ ' + s.viewers);
+      $('meta').textContent = parts.join(' · ');
 
       var night = s.coop.has_status && !s.coop.status.daylight;
       document.body.classList.toggle('night', night);
