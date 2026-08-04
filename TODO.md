@@ -19,9 +19,6 @@ already know we want.
       history).
 - [ ] Decide chook-app rollout automation: Flux image automation vs manual
       tag bumps in the GitOps repo.
-- [ ] Replace stream-pusher's exec-and-die restart with an in-container retry
-      loop: kubelet backoff stretches recovery to minutes after a camera
-      outage burst. Design agreed 2026-08-04, not yet shipped (GitOps repo).
 - [ ] Fix or delete the ChookVideoOriginRestarted alert: it watches
       process_start_time_seconds{job="chook-video"} but mediamtx exports no
       such metric, so it can never fire (GitOps repo).
