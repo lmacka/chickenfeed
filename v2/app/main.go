@@ -45,6 +45,7 @@ type App struct {
 	sessions  *Sessions
 	viewers   *Viewers
 	visitors  *Visitors
+	alltime   *PromCount
 	ptzLimit  *Limiter
 	lightLimit *Limiter
 	tmpl      *template.Template
@@ -112,6 +113,10 @@ func main() {
 		sessions:     NewSessions(time.Duration(envInt("SESSION_TTL_HOURS", 12)) * time.Hour),
 		viewers:      NewViewers(os.Getenv("VIDEO_METRICS_URL"), os.Getenv("VIDEO_METRICS_USER"), os.Getenv("VIDEO_METRICS_PASS")),
 		visitors:     NewVisitors(env("COOP_TZ", "Australia/Brisbane")),
+		// The window is the rf instance's full retention: "all time" means
+		// "since counting began", within the 3 years Prometheus keeps.
+		alltime: NewPromCount(os.Getenv("VISITORS_PROM_URL"),
+			env("VISITORS_PROM_QUERY", "sum(increase(chookapp_visitors_total[1095d]))")),
 		ptzLimit:     NewLimiter(time.Duration(envInt("PTZ_COOLDOWN_SECONDS", 5))*time.Second, envInt("PTZ_MOVES_PER_MINUTE", 6)),
 		lightLimit:   NewLimiter(time.Duration(envInt("LIGHT_COOLDOWN_SECONDS", 5))*time.Second, 0),
 		videoOrigin:  env("VIDEO_ORIGIN", "https://video.chook.cam"),
@@ -183,6 +188,12 @@ func main() {
 		go app.viewers.Run(time.Duration(envInt("VIEWERS_POLL_SECONDS", 5)) * time.Second)
 	} else {
 		log.Printf("viewers: VIDEO_METRICS_URL unset, viewer count disabled")
+	}
+
+	if app.alltime.Enabled() {
+		go app.alltime.Run(time.Duration(envInt("VISITORS_PROM_POLL_MINUTES", 5)) * time.Minute)
+	} else {
+		log.Printf("alltime: VISITORS_PROM_URL unset, all-time visitors disabled")
 	}
 
 	mux := http.NewServeMux()
@@ -330,6 +341,9 @@ type stateResp struct {
 	// Unique page visitors this coop-local day: one per client IP, counted
 	// in memory, so a deploy starts the day over.
 	VisitorsToday int `json:"visitors_today"`
+	// All-time uniques, read back from long-retention Prometheus. null when
+	// that instance has not answered recently, and the UI hides the row.
+	VisitorsAlltime *int `json:"visitors_alltime"`
 }
 
 func treatWaitSeconds(v CoopView) int {
@@ -357,15 +371,20 @@ func (a *App) handleState(w http.ResponseWriter, _ *http.Request) {
 	if n, ok := a.viewers.Current(); ok {
 		viewers = &n
 	}
+	var alltime *int
+	if n, ok := a.alltime.Current(); ok {
+		alltime = &n
+	}
 	writeJSON(w, http.StatusOK, stateResp{
-		Coop:          view,
-		TreatWait:     treatWaitSeconds(view),
-		PtzWait:       a.ptzLimit.WaitSeconds(now),
-		LightWait:     a.lightLimit.WaitSeconds(now),
-		TreatBusy:     busy,
-		Viewers:       viewers,
-		VisitorsToday: a.visitors.Today(now),
-		VideoBase:     a.videoOrigin + "/" + a.videoPath,
+		Coop:            view,
+		TreatWait:       treatWaitSeconds(view),
+		PtzWait:         a.ptzLimit.WaitSeconds(now),
+		LightWait:       a.lightLimit.WaitSeconds(now),
+		TreatBusy:       busy,
+		Viewers:         viewers,
+		VisitorsToday:   a.visitors.Today(now),
+		VisitorsAlltime: alltime,
+		VideoBase:       a.videoOrigin + "/" + a.videoPath,
 	})
 }
 
