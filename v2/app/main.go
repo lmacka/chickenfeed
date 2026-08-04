@@ -81,11 +81,8 @@ var (
 	metricViewers = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "chookapp_viewers", Help: "Live stream readers reported by the video origin (WebRTC + HLS).",
 	})
-	metricVisitorsToday = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "chookapp_visitors_today", Help: "Unique page visitors so far this coop-local day.",
-	})
-	metricVisitorsAll = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "chookapp_visitors_alltime", Help: "Unique daily page visitors, summed since counting began.",
+	metricVisitors = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "chookapp_visitors_total", Help: "Unique daily page visitors. Counter, so Prometheus owns the history across restarts.",
 	})
 )
 
@@ -114,7 +111,7 @@ func main() {
 		turnstile:    NewTurnstile(os.Getenv("TURNSTILE_SECRET")),
 		sessions:     NewSessions(time.Duration(envInt("SESSION_TTL_HOURS", 12)) * time.Hour),
 		viewers:      NewViewers(os.Getenv("VIDEO_METRICS_URL"), os.Getenv("VIDEO_METRICS_USER"), os.Getenv("VIDEO_METRICS_PASS")),
-		visitors:     NewVisitors(env("VISITOR_STATE_DIR", "/data"), env("COOP_TZ", "Australia/Brisbane")),
+		visitors:     NewVisitors(env("COOP_TZ", "Australia/Brisbane")),
 		ptzLimit:     NewLimiter(time.Duration(envInt("PTZ_COOLDOWN_SECONDS", 5))*time.Second, envInt("PTZ_MOVES_PER_MINUTE", 6)),
 		lightLimit:   NewLimiter(time.Duration(envInt("LIGHT_COOLDOWN_SECONDS", 5))*time.Second, 0),
 		videoOrigin:  env("VIDEO_ORIGIN", "https://video.chook.cam"),
@@ -240,9 +237,6 @@ func (a *App) metricsLoop() {
 		} else {
 			metricCoopOnline.Set(0)
 		}
-		today, all := a.visitors.Snapshot(time.Now())
-		metricVisitorsToday.Set(float64(today))
-		metricVisitorsAll.Set(float64(all))
 	}
 }
 
@@ -333,9 +327,9 @@ type stateResp struct {
 	// origin has not answered recently (or polling is disabled), so the UI
 	// hides the indicator rather than showing a number nobody stands behind.
 	Viewers *int `json:"viewers"`
-	// Unique page visitors: one per client IP per coop-local day.
-	VisitorsToday   int `json:"visitors_today"`
-	VisitorsAlltime int `json:"visitors_alltime"`
+	// Unique page visitors this coop-local day: one per client IP, counted
+	// in memory, so a deploy starts the day over.
+	VisitorsToday int `json:"visitors_today"`
 }
 
 func treatWaitSeconds(v CoopView) int {
@@ -363,17 +357,15 @@ func (a *App) handleState(w http.ResponseWriter, _ *http.Request) {
 	if n, ok := a.viewers.Current(); ok {
 		viewers = &n
 	}
-	vToday, vAll := a.visitors.Snapshot(now)
 	writeJSON(w, http.StatusOK, stateResp{
-		Coop:            view,
-		TreatWait:       treatWaitSeconds(view),
-		PtzWait:         a.ptzLimit.WaitSeconds(now),
-		LightWait:       a.lightLimit.WaitSeconds(now),
-		TreatBusy:       busy,
-		Viewers:         viewers,
-		VisitorsToday:   vToday,
-		VisitorsAlltime: vAll,
-		VideoBase:       a.videoOrigin + "/" + a.videoPath,
+		Coop:          view,
+		TreatWait:     treatWaitSeconds(view),
+		PtzWait:       a.ptzLimit.WaitSeconds(now),
+		LightWait:     a.lightLimit.WaitSeconds(now),
+		TreatBusy:     busy,
+		Viewers:       viewers,
+		VisitorsToday: a.visitors.Today(now),
+		VideoBase:     a.videoOrigin + "/" + a.videoPath,
 	})
 }
 

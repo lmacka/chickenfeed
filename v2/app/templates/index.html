@@ -319,7 +319,6 @@
     var st = s.coop.status || {}, c = s.coop.climate || {}, h = '';
     if (s.viewers != null) h += row('Watching now', s.viewers);
     h += row('Visitors today', s.visitors_today);
-    h += row('Visitors all time', s.visitors_alltime);
     if (s.coop.has_status) {
       h += row('Treats today', st.treats_today + ' of ' + st.daily_quota);
     }
