@@ -44,6 +44,7 @@ type App struct {
 	turnstile *Turnstile
 	sessions  *Sessions
 	viewers   *Viewers
+	visitors  *Visitors
 	ptzLimit  *Limiter
 	lightLimit *Limiter
 	tmpl      *template.Template
@@ -80,6 +81,12 @@ var (
 	metricViewers = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "chookapp_viewers", Help: "Live stream readers reported by the video origin (WebRTC + HLS).",
 	})
+	metricVisitorsToday = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "chookapp_visitors_today", Help: "Unique page visitors so far this coop-local day.",
+	})
+	metricVisitorsAll = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "chookapp_visitors_alltime", Help: "Unique daily page visitors, summed since counting began.",
+	})
 )
 
 func env(k, def string) string {
@@ -107,6 +114,7 @@ func main() {
 		turnstile:    NewTurnstile(os.Getenv("TURNSTILE_SECRET")),
 		sessions:     NewSessions(time.Duration(envInt("SESSION_TTL_HOURS", 12)) * time.Hour),
 		viewers:      NewViewers(os.Getenv("VIDEO_METRICS_URL"), os.Getenv("VIDEO_METRICS_USER"), os.Getenv("VIDEO_METRICS_PASS")),
+		visitors:     NewVisitors(env("VISITOR_STATE_DIR", "/data"), env("COOP_TZ", "Australia/Brisbane")),
 		ptzLimit:     NewLimiter(time.Duration(envInt("PTZ_COOLDOWN_SECONDS", 5))*time.Second, envInt("PTZ_MOVES_PER_MINUTE", 6)),
 		lightLimit:   NewLimiter(time.Duration(envInt("LIGHT_COOLDOWN_SECONDS", 5))*time.Second, 0),
 		videoOrigin:  env("VIDEO_ORIGIN", "https://video.chook.cam"),
@@ -232,6 +240,9 @@ func (a *App) metricsLoop() {
 		} else {
 			metricCoopOnline.Set(0)
 		}
+		today, all := a.visitors.Snapshot(time.Now())
+		metricVisitorsToday.Set(float64(today))
+		metricVisitorsAll.Set(float64(all))
 	}
 }
 
@@ -284,6 +295,7 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// The page must never be cached: it carries the asset version.
 	w.Header().Set("Cache-Control", "no-cache")
+	a.visitors.Record(a.clientIP(r), time.Now())
 	// html/template escapes by default. The retired server built HTML with
 	// fmt.Fprintf and shipped stored XSS; this must stay a template.
 	if err := a.tmpl.Execute(w, pageData{
@@ -321,6 +333,9 @@ type stateResp struct {
 	// origin has not answered recently (or polling is disabled), so the UI
 	// hides the indicator rather than showing a number nobody stands behind.
 	Viewers *int `json:"viewers"`
+	// Unique page visitors: one per client IP per coop-local day.
+	VisitorsToday   int `json:"visitors_today"`
+	VisitorsAlltime int `json:"visitors_alltime"`
 }
 
 func treatWaitSeconds(v CoopView) int {
@@ -348,14 +363,17 @@ func (a *App) handleState(w http.ResponseWriter, _ *http.Request) {
 	if n, ok := a.viewers.Current(); ok {
 		viewers = &n
 	}
+	vToday, vAll := a.visitors.Snapshot(now)
 	writeJSON(w, http.StatusOK, stateResp{
-		Coop:      view,
-		TreatWait: treatWaitSeconds(view),
-		PtzWait:   a.ptzLimit.WaitSeconds(now),
-		LightWait: a.lightLimit.WaitSeconds(now),
-		TreatBusy: busy,
-		Viewers:   viewers,
-		VideoBase: a.videoOrigin + "/" + a.videoPath,
+		Coop:            view,
+		TreatWait:       treatWaitSeconds(view),
+		PtzWait:         a.ptzLimit.WaitSeconds(now),
+		LightWait:       a.lightLimit.WaitSeconds(now),
+		TreatBusy:       busy,
+		Viewers:         viewers,
+		VisitorsToday:   vToday,
+		VisitorsAlltime: vAll,
+		VideoBase:       a.videoOrigin + "/" + a.videoPath,
 	})
 }
 

@@ -90,16 +90,11 @@
 <div class="modal" id="about-modal">
   <div class="modal-card info-card">
     <h2>About</h2>
-    <p>chook.cam is a live camera pointed at a brooder full of backyard
-    chickens in Brisbane, Australia. Everyone shares the same camera: you can
-    change the view, switch the light, and send a real treat down a real
-    chute while the sun is up.</p>
-    <p>The chickens come first. A small computer in the coop enforces the
-    house rules, treats in daylight only, spaced through the day, six at
-    most. The website can ask; it cannot override.</p>
-    <p>Video travels from the coop through a home server cluster and out via
-    a relay. Source at
-    <a href="https://github.com/lmacka/chickenfeed" target="_blank" rel="noopener">github.com/lmacka/chickenfeed</a>.</p>
+    <p>Just a little toy for sharing the antics of these funny little
+    creatures with the world. These baby Belgian d'Uccle chickens are raised
+    and then homed as much-loved pets.</p>
+    <p><a href="https://www.bootsandbeards.com.au" target="_blank" rel="noopener">www.bootsandbeards.com.au</a><br>
+    <a href="https://github.com/lmacka/chickenfeed" target="_blank" rel="noopener">GitHub</a></p>
   </div>
 </div>
 
@@ -323,12 +318,14 @@
     function row(k, v) { return '<div><dt>' + k + '</dt><dd>' + v + '</dd></div>'; }
     var st = s.coop.status || {}, c = s.coop.climate || {}, h = '';
     if (s.viewers != null) h += row('Watching now', s.viewers);
+    h += row('Visitors today', s.visitors_today);
+    h += row('Visitors all time', s.visitors_alltime);
     if (s.coop.has_status) {
       h += row('Treats today', st.treats_today + ' of ' + st.daily_quota);
-      h += row('Chickens', st.daylight ? 'awake' : 'asleep');
     }
     if (s.coop.has_climate) {
       h += row('Temperature', c.temperature.toFixed(1) + ' °C');
+      h += row('Humidity', Math.round(c.humidity) + ' % (faulty)');
       h += row('Light level', Math.round(c.light) + ' lx');
       h += row('Pressure', Math.round(c.pressure) + ' hPa');
     }
@@ -497,14 +494,15 @@
     fetch('/api/state').then(function (r) { return r.json(); }).then(function (s) {
       lastState = s;
 
+      // Values are numbers from our own API, so innerHTML is safe here.
+      var EYE = '<svg class="eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>';
       var parts = [];
       if (s.coop.online && s.coop.has_climate) {
         parts.push(s.coop.climate.temperature.toFixed(1) + '°C');
-        parts.push(Math.round(s.coop.climate.light) + ' lx');
       }
       // null means the video origin is not answering; hide rather than lie.
-      if (s.viewers != null) parts.push('👁️ ' + s.viewers);
-      $('meta').textContent = parts.join(' · ');
+      if (s.viewers != null) parts.push(EYE + ' ' + s.viewers);
+      $('meta').innerHTML = parts.join(' · ');
 
       var night = s.coop.has_status && !s.coop.status.daylight;
       document.body.classList.toggle('night', night);

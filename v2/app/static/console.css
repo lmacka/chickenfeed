@@ -41,6 +41,7 @@ body{
 body.night .livechip{background:rgba(96,106,126,.85)}
 .meta{margin-left:auto;font-size:.78rem;font-weight:700;color:var(--ink);
   font-variant-numeric:tabular-nums}
+.meta .eye{width:1.05em;height:1.05em;vertical-align:-.18em}
 
 /* ---------- video ---------- */
 .vidwrap{position:relative}
