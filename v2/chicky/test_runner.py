@@ -121,6 +121,45 @@ s6.note_light_on()
 time.sleep(0.5)
 check("auto-off switched the relay off", fr.calls and fr.calls[-1] is False, f"calls={fr.calls}")
 
+print("\n=== light: the deadline does not extend ===")
+# The bug this replaces: note_light_on() cancelled and restarted the timer, so
+# re-sending ON just inside the window held the light on until dawn.
+fr2 = FakeRelay()
+s7 = SafetyEnvelope(relay=fr2)
+s7.light_auto_off_minutes = 0.6 / 60  # ~600ms
+s7.light_cooldown = 0
+s7.note_light_on()
+for _ in range(6):  # keep asking, well inside the deadline
+    time.sleep(0.15)
+    s7.note_light_on()
+time.sleep(0.6)
+check("repeated ON cannot hold the light past its deadline",
+      fr2.calls and fr2.calls[-1] is False, f"calls={fr2.calls}")
+
+print("\n=== light: night budget ===")
+fr3 = FakeRelay()
+s8 = SafetyEnvelope(relay=fr3)
+s8.light_cooldown = 0
+s8.is_daylight = lambda: False        # force night
+s8.light_night_budget_minutes = 1
+s8._light_night_key = "forced"
+s8._light_night_seconds = 0.0
+allowed, _ = s8.can_light(True)
+check("light allowed at night while budget remains", allowed)
+s8._light_night_seconds = 61.0        # budget spent
+allowed, reason = s8.can_light(True)
+check("light refused once the night budget is spent", not allowed, reason)
+allowed, _ = s8.can_light(False)
+check("turning the light OFF is never refused", allowed)
+
+print("\n=== light: cooldown ===")
+s9 = SafetyEnvelope(relay=None)
+s9.is_daylight = lambda: True
+s9.light_cooldown = 30
+s9.note_light_on()
+allowed, reason = s9.can_light(True)
+check("light cooldown blocks relay chatter", not allowed, reason)
+
 print("\n=== MQTT bridge against the real broker ===")
 # Skipped without a broker, so CI can assert a clean exit rather than
 # tolerating a non-zero one and masking real failures along with it.

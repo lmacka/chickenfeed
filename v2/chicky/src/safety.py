@@ -71,6 +71,14 @@ class SafetyEnvelope:
         self.treat_paced = os.getenv("TREAT_PACED", "true").lower() != "false"
         self.light_auto_off_minutes = _env_int("LIGHT_AUTO_OFF_MINUTES", 30)
         self.daylight_only = os.getenv("TREAT_DAYLIGHT_ONLY", "true").lower() != "false"
+        # Minimum gap between light switches. The relay has no mechanical guard
+        # of its own, so without this an unauthenticated caller can chatter a
+        # mains relay at request rate.
+        self.light_cooldown = _env_int("LIGHT_COOLDOWN_SECONDS", 5)
+        # Total minutes the light may be on across one night, counted from
+        # sunset to sunrise and persisted. Chickens need real darkness; this is
+        # what stops the light being held on until dawn.
+        self.light_night_budget_minutes = _env_int("LIGHT_NIGHT_BUDGET_MINUTES", 15)
 
         self._last_dispense = None
         self._dispense_count = 0
@@ -78,6 +86,9 @@ class SafetyEnvelope:
         self._dispensing = False
         self._light_timer = None
         self._light_on_since = None
+        self._last_light_change = None
+        self._light_night_seconds = 0.0
+        self._light_night_key = None
 
         self._load()
 
@@ -91,6 +102,9 @@ class SafetyEnvelope:
             self._dispense_count = int(data.get("dispense_count", 0))
             last = data.get("last_dispense")
             self._last_dispense = datetime.fromisoformat(last) if last else None
+            # Persisted so a restart cannot hand back a fresh night's budget.
+            self._light_night_key = data.get("light_night_key")
+            self._light_night_seconds = float(data.get("light_night_seconds", 0.0))
             logger.info(
                 "Safety state loaded: %s dispenses on %s",
                 self._dispense_count, self._quota_day,
@@ -110,6 +124,8 @@ class SafetyEnvelope:
                     "quota_day": self._quota_day,
                     "dispense_count": self._dispense_count,
                     "last_dispense": self._last_dispense.isoformat() if self._last_dispense else None,
+                    "light_night_key": self._light_night_key,
+                    "light_night_seconds": self._light_night_seconds,
                 }, fh)
             os.replace(tmp, STATE_FILE)
         except Exception as exc:
@@ -248,34 +264,111 @@ class SafetyEnvelope:
 
     # ---------- light ----------
 
-    def note_light_on(self):
-        """Start (or restart) the auto-off timer so the light cannot stay on.
+    def _night_key(self, now):
+        """Identifies one dusk-to-dawn night, so a budget spans midnight.
 
-        Chickens need real darkness. Any path that turns the light on goes
-        through here, so a forgotten toggle or a wedged web app still ends with
-        the light off.
+        Before sunrise still belongs to the previous calendar day's night.
+        """
+        try:
+            sunrise, _ = self._sun_window(now)
+            if now < sunrise:
+                return (now.date() - timedelta(days=1)).isoformat()
+        except Exception:
+            pass
+        return now.date().isoformat()
+
+    def _roll_night_if_needed(self, now):
+        key = self._night_key(now)
+        if self._light_night_key != key:
+            self._light_night_key = key
+            self._light_night_seconds = 0.0
+            self._save()
+
+    def _night_seconds_remaining(self, now):
+        self._roll_night_if_needed(now)
+        budget = max(0, self.light_night_budget_minutes) * 60
+        return max(0.0, budget - self._light_night_seconds)
+
+    def can_light(self, on):
+        """Return (allowed, reason) for a light request.
+
+        Turning the light OFF is always allowed: a safety gate must never be
+        the reason a light stays on. Turning it ON is rate limited always, and
+        at night is additionally capped by a cumulative budget, so the coop
+        cannot be lit until dawn by anyone, including a fully compromised web
+        app.
         """
         with self._lock:
-            self._cancel_light_timer()
-            self._light_on_since = self._now()
-            if self.light_auto_off_minutes <= 0:
+            now = self._now()
+            if not on:
+                return True, "ok"
+
+            if self._last_light_change is not None:
+                elapsed = (now - self._last_light_change).total_seconds()
+                if elapsed < self.light_cooldown:
+                    return False, f"the light needs a moment, try again in {int(self.light_cooldown - elapsed) + 1}s"
+
+            if not self.is_daylight():
+                if self._night_seconds_remaining(now) <= 0:
+                    return False, "the chickens need darkness, the light has had its time tonight"
+
+            return True, "ok"
+
+    def note_light_on(self):
+        """Arm the auto-off deadline. Does NOT extend an existing one.
+
+        Re-arming on every ON was the bug: re-sending ON just inside the
+        window held the light on indefinitely. The deadline is set by the
+        first ON and runs to completion; at night it is also clamped to
+        whatever is left of the night's budget.
+        """
+        with self._lock:
+            now = self._now()
+            self._last_light_change = now
+            if self._light_timer is not None:
+                # A deadline is already running. Leave it alone.
                 return
-            self._light_timer = threading.Timer(
-                self.light_auto_off_minutes * 60, self._auto_off
-            )
+            self._light_on_since = now
+            if self.light_auto_off_minutes <= 0:
+                logger.warning(
+                    "LIGHT_AUTO_OFF_MINUTES is %s: the light has no auto-off",
+                    self.light_auto_off_minutes,
+                )
+                return
+            seconds = self.light_auto_off_minutes * 60
+            if not self.is_daylight():
+                seconds = min(seconds, self._night_seconds_remaining(now))
+            if seconds <= 0:
+                # Budget already spent; the caller should not have got here.
+                seconds = 1
+            self._light_timer = threading.Timer(seconds, self._auto_off)
             self._light_timer.daemon = True
             self._light_timer.start()
-            logger.info("Coop light on; auto-off in %s min", self.light_auto_off_minutes)
+            logger.info("Coop light on; auto-off in %.0f s", seconds)
 
     def note_light_off(self):
         with self._lock:
             self._cancel_light_timer()
-            self._light_on_since = None
+            self._last_light_change = self._now()
+            self._account_light_time()
 
     def _cancel_light_timer(self):
         if self._light_timer is not None:
             self._light_timer.cancel()
             self._light_timer = None
+
+    def _account_light_time(self):
+        """Bank any night-time the light has just been on. Lock held."""
+        if self._light_on_since is None:
+            self._light_on_since = None
+            return
+        now = self._now()
+        elapsed = max(0.0, (now - self._light_on_since).total_seconds())
+        self._light_on_since = None
+        if elapsed and not self.is_daylight():
+            self._roll_night_if_needed(now)
+            self._light_night_seconds += elapsed
+            self._save()
 
     def _auto_off(self):
         logger.warning("Coop light auto-off timer fired; turning the light off")
@@ -287,7 +380,7 @@ class SafetyEnvelope:
         finally:
             with self._lock:
                 self._light_timer = None
-                self._light_on_since = None
+                self._account_light_time()
 
     # ---------- reporting ----------
 
@@ -309,4 +402,6 @@ class SafetyEnvelope:
                 "last_dispense": self._last_dispense.isoformat() if self._last_dispense else None,
                 "light_auto_off_minutes": self.light_auto_off_minutes,
                 "light_on_since": self._light_on_since.isoformat() if self._light_on_since else None,
+                "light_allowed": self.can_light(True)[0],
+                "light_night_seconds_remaining": int(self._night_seconds_remaining(now)),
             }

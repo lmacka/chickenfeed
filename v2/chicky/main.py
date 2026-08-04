@@ -142,7 +142,15 @@ async def dispense_treat() -> dict[str, Any]:
 
 @app.post("/api/light")
 async def toggle_light() -> dict[str, Any]:
-    """Toggle the coop light. Turning it on always arms the auto-off timer."""
+    """Toggle the coop light, if the safety envelope allows it."""
+    # Work out which way the toggle will go and clear it with the envelope
+    # first. Turning the light OFF is never refused.
+    current = bool(getattr(relay, "light_state", False)) if (HARDWARE_AVAILABLE and relay) \
+        else bool(getattr(toggle_light, "_mock_state", False))
+    allowed, reason = safety.can_light(not current)
+    if not allowed:
+        # 429 rather than 403: a scheduling refusal, not authz. Matches /api/treat.
+        raise HTTPException(status_code=429, detail=reason)
     try:
         if HARDWARE_AVAILABLE and relay:
             state = relay.toggle_light()

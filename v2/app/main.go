@@ -471,12 +471,26 @@ func (a *App) handleLight(w http.ResponseWriter, r *http.Request) {
 	if !a.requireSession(w, r) {
 		return
 	}
+	// Only "on" turns it on. This used to be `!= "off"`, so a request with no
+	// state parameter at all switched the light ON: the wrong way to fail.
+	on := r.FormValue("state") == "on"
+	// The UI greys the light at night, but that is CSS. Without this check the
+	// coop could be lit at 2am by anyone who posts to this endpoint. chicky's
+	// envelope is the authority and enforces a night budget of its own; this
+	// is the same refusal made early, and it keeps the API honest about what
+	// the interface promises.
+	if on {
+		if v := a.coop.View(); v.HasStatus && !v.Status.Daylight {
+			metricCommands.WithLabelValues("light", "refused").Inc()
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "the chickens are asleep, the light is daylight only"})
+			return
+		}
+	}
 	if !a.lightLimit.Try(time.Now()) {
 		metricCommands.WithLabelValues("light", "limited").Inc()
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "the light needs a moment"})
 		return
 	}
-	on := r.FormValue("state") != "off"
 	if err := a.coop.Light(on); err != nil {
 		metricCommands.WithLabelValues("light", "error").Inc()
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "could not reach the coop"})

@@ -238,6 +238,16 @@ class MqttBridge:
             self._publish_state()
 
     def _do_light(self, on):
+        # Ask the envelope BEFORE touching the relay. It used to be told after
+        # the fact, which meant it could not refuse: the light had no night
+        # limit and no cooldown, and the website could hold the coop lit all
+        # night. The envelope is authoritative for the light now, as it always
+        # was for treats.
+        allowed, reason = self.safety.can_light(on)
+        if not allowed:
+            logger.warning("Light refused by safety envelope: %s", reason)
+            self._publish_state()
+            return
         try:
             if self.relay is not None:
                 self.relay.set_state(on)
