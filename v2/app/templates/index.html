@@ -53,6 +53,15 @@
       </svg>
       <span class="lbl" id="treatlbl">Treat</span>
     </button>
+    <div class="menuwrap">
+      <button class="menubtn" id="menu" aria-label="Menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div class="menupop" id="menupop" hidden>
+        <button class="mitem" id="mi-stats">Stats</button>
+        <button class="mitem" id="mi-about">About</button>
+      </div>
+    </div>
   </div>
   <div class="sleepchip">The chicks are asleep. <b>Back at sunrise.</b></div>
 </div>
@@ -68,6 +77,29 @@
       <div class="modal-msg">Ensuring humanity&hellip;</div>
     </div>
     <div id="ts-box"></div>
+  </div>
+</div>
+
+<div class="modal" id="stats-modal">
+  <div class="modal-card info-card">
+    <h2>Right now</h2>
+    <dl class="stats" id="statsdl"></dl>
+  </div>
+</div>
+
+<div class="modal" id="about-modal">
+  <div class="modal-card info-card">
+    <h2>About</h2>
+    <p>chook.cam is a live camera pointed at a brooder full of backyard
+    chickens in Brisbane, Australia. Everyone shares the same camera: you can
+    change the view, switch the light, and send a real treat down a real
+    chute while the sun is up.</p>
+    <p>The chickens come first. A small computer in the coop enforces the
+    house rules, treats in daylight only, spaced through the day, six at
+    most. The website can ask; it cannot override.</p>
+    <p>Video travels from the coop through a home server cluster and out via
+    a relay. Source at
+    <a href="https://github.com/lmacka/chickenfeed" target="_blank" rel="noopener">github.com/lmacka/chickenfeed</a>.</p>
   </div>
 </div>
 
@@ -165,8 +197,8 @@
     clearTimeout(idleTimer);
     if (window.matchMedia('(orientation: portrait)').matches) return;
     idleTimer = setTimeout(function () {
-      // Never fade mid-action or while the challenge modal is up.
-      if (busy || $('modal').classList.contains('show')) return;
+      // Never fade mid-action, or while any modal or the menu is open.
+      if (busy || document.querySelector('.modal.show') || !$('menupop').hidden) return;
       var hud = $('hud');
       if (hud.matches(':hover') || hud.contains(document.activeElement)) return;
       document.body.classList.add('idle');
@@ -252,6 +284,57 @@
   $('modal').addEventListener('click', function (e) {
     if (e.target === $('modal')) settleVerify(false);
   });
+
+  // ---------- menu: Stats / About ----------
+  var pop = $('menupop'), menuBtn = $('menu');
+  function closePop() {
+    pop.hidden = true;
+    menuBtn.setAttribute('aria-expanded', 'false');
+  }
+  menuBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    pop.hidden = !pop.hidden;
+    menuBtn.setAttribute('aria-expanded', String(!pop.hidden));
+  });
+  document.addEventListener('click', function (e) {
+    if (!pop.hidden && !pop.contains(e.target) && !menuBtn.contains(e.target)) closePop();
+  });
+
+  function openInfo(id) { closePop(); $(id).classList.add('show'); wake(); }
+  ['stats-modal', 'about-modal'].forEach(function (id) {
+    $(id).addEventListener('click', function (e) {
+      if (e.target === $(id)) $(id).classList.remove('show');
+    });
+  });
+  $('mi-stats').addEventListener('click', function () { renderStats(); openInfo('stats-modal'); });
+  $('mi-about').addEventListener('click', function () { openInfo('about-modal'); });
+  window.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    closePop();
+    $('stats-modal').classList.remove('show');
+    $('about-modal').classList.remove('show');
+  });
+
+  // Everything shown here is a number or boolean from our own API, never a
+  // passed-through string, so innerHTML stays safe.
+  function renderStats() {
+    var s = lastState, d = $('statsdl');
+    if (!s) { d.innerHTML = ''; return; }
+    function row(k, v) { return '<div><dt>' + k + '</dt><dd>' + v + '</dd></div>'; }
+    var st = s.coop.status || {}, c = s.coop.climate || {}, h = '';
+    if (s.viewers != null) h += row('Watching now', s.viewers);
+    if (s.coop.has_status) {
+      h += row('Treats today', st.treats_today + ' of ' + st.daily_quota);
+      h += row('Chickens', st.daylight ? 'awake' : 'asleep');
+    }
+    if (s.coop.has_climate) {
+      h += row('Temperature', c.temperature.toFixed(1) + ' °C');
+      h += row('Light level', Math.round(c.light) + ' lx');
+      h += row('Pressure', Math.round(c.pressure) + ' hPa');
+    }
+    h += row('Coop link', s.coop.online ? 'online' : 'offline');
+    d.innerHTML = h;
+  }
 
   // ---------- console ----------
   function post(path, params) {
@@ -437,6 +520,7 @@
 
       renderTreat(s);
       renderLocks();
+      if ($('stats-modal').classList.contains('show')) renderStats();
     }).catch(function () {});
   }
 
