@@ -25,3 +25,8 @@ already know we want.
 - [ ] Fix or delete the ChookVideoOriginRestarted alert: it watches
       process_start_time_seconds{job="chook-video"} but mediamtx exports no
       such metric, so it can never fire (GitOps repo).
+- [ ] Stop serving /metrics through the public tunnel: chook.cam/metrics
+      answers to anyone. Only command/session counters leak, but Prometheus
+      scrapes in-cluster, so the public route serves nobody. Guard in the
+      app (allowlist or separate port) or drop the path at the tunnel
+      ingress.
