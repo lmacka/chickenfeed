@@ -19,5 +19,15 @@ services:
       - PORT=3000
       - LOG_LEVEL=INFO
 
+  # 433MHz SDR receiver (NESDR on USB), relocated from the cluster to reach the
+  # shed incubator sensors. Publishes rtl_433 JSON to the homelab broker; the
+  # MQTT host and credentials are balena service variables, not committed.
+  # privileged: raw USB access. Gotcha: if the dongle is plugged in after boot,
+  # restart this service so it enumerates.
+  rtl433:
+    build: ./rtl433-sdr
+    privileged: true
+    restart: always
+
 volumes:
   resin-data:
