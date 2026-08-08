@@ -352,6 +352,11 @@
     notesWin.hidden = false;
     loadNotes();
     wake();
+    // Portrait puts the window in the page flow below the controls; make
+    // sure opening it actually shows it.
+    if (window.matchMedia('(orientation: portrait)').matches) {
+      notesWin.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   });
   $('notes-close').addEventListener('click', function () { notesWin.hidden = true; });
 

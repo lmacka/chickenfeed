@@ -205,10 +205,11 @@ body.unverified .lightdial{opacity:.55}
 .floatwin-body{flex:1;overflow-y:auto;padding:.6rem .8rem}
 
 @media (orientation:portrait){
-  /* A bottom sheet, not a window: dragging is pointless on a phone. */
-  .floatwin{left:0;right:0;bottom:0;width:100%;border-radius:14px 14px 0 0;
-    height:min(24rem,70dvh)}
+  /* In the document flow below the controls, never over them: the page
+     scrolls, and the hud's flex:1 collapses so the controls hug the video. */
+  .floatwin{position:static;width:auto;height:auto;margin:.4rem .8rem 1rem}
   .floatwin-hd{cursor:default;touch-action:auto}
+  .floatwin-body{overflow-y:visible}
 }
 
 /* ---------- portrait: stacked, nothing overlays the picture ---------- */
