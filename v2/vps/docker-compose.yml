@@ -62,9 +62,8 @@ services:
       - AUTH_ANON=true
       - EDIT_TIME=5m
       - MAX_COMMENT_SIZE=1000
-      # After Liam's first anonymous login, put his user id here (visible in
-      # the avatar menu / /api/v1/user) to unlock delete+block moderation:
-      # - ADMIN_SHARED_ID=anonymous_...
+      # Liam's anonymous login (ChookDaddy): unlocks delete+block moderation.
+      - ADMIN_SHARED_ID=anonymous_58659d6a493f3d0a99708ef49308069170cfa5d7
     volumes:
       - ./remark42-data:/srv/var
     restart: unless-stopped
