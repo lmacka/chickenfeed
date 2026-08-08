@@ -15,6 +15,10 @@ services:
       - URL=video.chook.cam
       - VALIDATION=http
       - SUBDOMAINS=
+      # notes.chook.cam must be a grey-cloud A record to this box BEFORE this
+      # is deployed: certbot fails the whole cert if any name in it fails
+      # HTTP-01, which would take video's TLS down at the next renewal.
+      - EXTRA_DOMAINS=notes.chook.cam
       - CERTPROVIDER=
       - EMAIL=${SWAG_EMAIL}
       - STAGING=false
@@ -43,6 +47,29 @@ services:
     networks:
       - chook-net
 
+  # Remark42 - the visitor guestbook at notes.chook.cam, embedded on chook.cam
+  # as a floating window. Anonymous-only auth; visitors pick a display name.
+  # State is a single BoltDB file under ./remark42-data (runs as uid 1001, so
+  # chown the dir once at creation). Reachable only via swag; nothing else on
+  # this box or the home network is in its blast radius.
+  remark42:
+    image: umputun/remark42:v1.16.4
+    container_name: remark42
+    environment:
+      - REMARK_URL=https://notes.chook.cam
+      - SECRET=${REMARK_SECRET}
+      - SITE=chookcam
+      - AUTH_ANON=true
+      - EDIT_TIME=5m
+      - MAX_COMMENT_SIZE=1000
+      # After Liam's first anonymous login, put his user id here (visible in
+      # the avatar menu / /api/v1/user) to unlock delete+block moderation:
+      # - ADMIN_SHARED_ID=anonymous_...
+    volumes:
+      - ./remark42-data:/srv/var
+    restart: unless-stopped
+    networks:
+      - chook-net
 
 networks:
   chook-net:

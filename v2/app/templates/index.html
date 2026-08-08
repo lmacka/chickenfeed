@@ -58,6 +58,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
       <div class="menupop" id="menupop" hidden>
+        <button class="mitem" id="mi-notes">Notes</button>
         <button class="mitem" id="mi-stats">Stats</button>
         <button class="mitem" id="mi-about">About</button>
       </div>
@@ -96,6 +97,19 @@
     <!-- bootsandbeards.com.au link goes here once that site is ready. -->
     <p><a href="https://github.com/lmacka/chickenfeed" target="_blank" rel="noopener">GitHub</a></p>
   </div>
+</div>
+
+<!-- The notes window: a Remark42 guestbook served from the video VPS
+     (notes.chook.cam), fully outside the cluster. The embed script is only
+     fetched on first open, so visitors who never open it generate no traffic
+     to the guestbook host. Draggable by its header; portrait CSS pins it as
+     a bottom sheet instead. -->
+<div class="floatwin" id="notes-win" hidden>
+  <div class="floatwin-hd" id="notes-drag">
+    <span>Visitor notes</span>
+    <button class="floatwin-x" id="notes-close" aria-label="Close">&times;</button>
+  </div>
+  <div class="floatwin-body"><div id="remark42"></div></div>
 </div>
 
 <script src="/static/hls.min.js?v={{.AssetVersion}}"></script>
@@ -308,7 +322,67 @@
     closePop();
     $('stats-modal').classList.remove('show');
     $('about-modal').classList.remove('show');
+    $('notes-win').hidden = true;
   });
+
+  // ---------- notes: the remark42 guestbook in a floating window ----------
+  var NOTES_HOST = 'https://notes.chook.cam';
+  var notesWin = $('notes-win'), notesLoaded = false;
+
+  function loadNotes() {
+    if (notesLoaded) return;
+    notesLoaded = true;
+    // url is pinned so every visitor lands in the one guestbook thread,
+    // whatever query string they arrived with.
+    window.remark_config = {
+      host: NOTES_HOST,
+      site_id: 'chookcam',
+      url: 'https://chook.cam/',
+      theme: 'dark',
+      no_footer: true
+    };
+    var s = document.createElement('script');
+    s.type = 'module';
+    s.src = NOTES_HOST + '/web/embed.mjs';
+    document.head.appendChild(s);
+  }
+
+  $('mi-notes').addEventListener('click', function () {
+    closePop();
+    notesWin.hidden = false;
+    loadNotes();
+    wake();
+  });
+  $('notes-close').addEventListener('click', function () { notesWin.hidden = true; });
+
+  (function () {
+    var drag = $('notes-drag'), moving = false, sx = 0, sy = 0, ox = 0, oy = 0;
+    drag.addEventListener('pointerdown', function (e) {
+      if (e.target.id === 'notes-close') return;
+      // Portrait renders as a bottom sheet; there is nowhere to drag it.
+      if (window.matchMedia('(orientation: portrait)').matches) return;
+      moving = true;
+      var r = notesWin.getBoundingClientRect();
+      // First drag switches from the CSS default anchor to explicit left/top.
+      notesWin.style.left = r.left + 'px';
+      notesWin.style.top = r.top + 'px';
+      notesWin.style.right = 'auto';
+      notesWin.style.bottom = 'auto';
+      sx = e.clientX; sy = e.clientY; ox = r.left; oy = r.top;
+      drag.setPointerCapture(e.pointerId);
+    });
+    drag.addEventListener('pointermove', function (e) {
+      if (!moving) return;
+      var x = ox + e.clientX - sx, y = oy + e.clientY - sy;
+      // Keep enough of the header on screen to grab it back.
+      x = Math.max(60 - notesWin.offsetWidth, Math.min(x, window.innerWidth - 60));
+      y = Math.max(0, Math.min(y, window.innerHeight - 40));
+      notesWin.style.left = x + 'px';
+      notesWin.style.top = y + 'px';
+    });
+    drag.addEventListener('pointerup', function () { moving = false; });
+    drag.addEventListener('pointercancel', function () { moving = false; });
+  })();
 
   // Everything shown here is a number or boolean from our own API, never a
   // passed-through string, so innerHTML stays safe.
