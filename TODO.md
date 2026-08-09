@@ -4,6 +4,9 @@ Running list of known work. Add items as they come up, remove them when done.
 Anything needing discussion belongs in an issue instead; this is for things we
 already know we want.
 
+- [ ] Brooder panel: when this batch leaves the brooder, flip `BROODER_ENABLED`
+      off in the GitOps deployment env (otherwise the day counter just keeps
+      counting). Next batch: set the new `BROODER_HATCH_EPOCH` there too.
 - [ ] Confirm camera preset 2 is actually the feeder (needs daylight). If not,
       set `TREAT_PRESET_TOKEN` in the deployment env; no rebuild needed.
 - [ ] Tune `TREAT_SETTLE_SECONDS` (default 4) by watching a real treat land

@@ -81,10 +81,34 @@
   </div>
 </div>
 
+<!-- The stats window. With a brood running (/api/brooder up) it is the
+     brooder panel: heat-pad scene, 12h graph, site stats. Otherwise the
+     scene and graph stay hidden and the plain list is all there is. -->
 <div class="modal" id="stats-modal">
-  <div class="modal-card info-card">
-    <h2>Right now</h2>
+  <div class="modal-card brooder-card">
+    <div class="bp-hd">
+      <h2 id="bp-title">Right now</h2>
+      <span class="daychip" id="bp-day" hidden></span>
+    </div>
+    <div class="bp-sub" id="bp-sub" hidden></div>
+    <svg class="bp-scene" id="bp-scene" viewBox="0 0 360 168" role="img" hidden
+         aria-label="Brooder heat pad: rear and front temperatures, with ambient conditions"></svg>
+    <div class="bp-ribbon" id="bp-ribbon" hidden>
+      <h3>Last 12 h</h3>
+      <div class="bp-legend">
+        <span><i style="background:#ffd166"></i>Rear</span>
+        <span><i style="background:#e2703a"></i>Front</span>
+        <span><i style="background:#47a4a8"></i>Ambient</span>
+        <span><i style="background:#a89f8f"></i>Humidity</span>
+      </div>
+      <div class="bp-plot" id="bp-plot">
+        <svg id="bp-chart" viewBox="0 0 360 114" role="img"
+             aria-label="Rear, front and ambient temperature with humidity on a right axis, last 12 hours"></svg>
+        <div class="bp-tip" id="bp-tip"></div>
+      </div>
+    </div>
     <dl class="stats" id="statsdl"></dl>
+    <div class="bp-foot" id="bp-foot" hidden><span class="dot"></span><span id="bp-foot-t"></span></div>
   </div>
 </div>
 
@@ -315,7 +339,11 @@
       if (e.target === $(id)) $(id).classList.remove('show');
     });
   });
-  $('mi-stats').addEventListener('click', function () { renderStats(); openInfo('stats-modal'); });
+  $('mi-stats').addEventListener('click', function () {
+    renderStatsWindow();
+    loadBrooder().then(renderStatsWindow);
+    openInfo('stats-modal');
+  });
   $('mi-about').addEventListener('click', function () { openInfo('about-modal'); });
   window.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
@@ -403,13 +431,265 @@
       h += row('Treats today', st.treats_today + ' of ' + st.daily_quota);
     }
     if (s.coop.has_climate) {
-      h += row('Temperature', c.temperature.toFixed(1) + ' °C');
-      h += row('Humidity', Math.round(c.humidity) + ' % (faulty)');
+      // With the brooder panel up, temperature/humidity/pressure live on the
+      // scene; repeating them here is the double-up the panel replaced.
+      if (!brooderData) {
+        h += row('Temperature', c.temperature.toFixed(1) + ' °C');
+        h += row('Humidity', Math.round(c.humidity) + ' % (faulty)');
+        h += row('Pressure', Math.round(c.pressure) + ' hPa');
+      }
       h += row('Light level', Math.round(c.light) + ' lx');
-      h += row('Pressure', Math.round(c.pressure) + ' hPa');
     }
     h += row('Coop link', s.coop.online ? 'online' : 'offline');
     d.innerHTML = h;
+  }
+
+  // ---------- the brooder panel ----------
+  // /api/brooder serves the heat-pad history the server reads back from
+  // Prometheus. When it is off or broken the window silently stays the
+  // plain list above.
+  var brooderData = null, brooderAt = 0;
+
+  function loadBrooder() {
+    if (Date.now() - brooderAt < 60000) return Promise.resolve(brooderData);
+    brooderAt = Date.now();
+    return fetch('/api/brooder')
+      .then(function (r) { if (!r.ok) throw 0; return r.json(); })
+      .then(function (j) { brooderData = j; return j; })
+      .catch(function () { brooderData = null; return null; });
+  }
+
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function svgEl(p, n, at) {
+    var e = document.createElementNS(SVGNS, n);
+    for (var k in at) e.setAttribute(k, at[k]);
+    if (p) p.appendChild(e);
+    return e;
+  }
+  function svgTxt(p, x, y, str, at) {
+    var t = svgEl(p, 'text', Object.assign({ x: x, y: y, 'font-family': 'inherit' }, at));
+    t.textContent = str;
+    return t;
+  }
+  function clearSvg(s) { while (s.firstChild) s.removeChild(s.firstChild); }
+  // The coop's clock. Fixed +10: Queensland has no DST.
+  function hhmmB(ts) {
+    var d = new Date((ts + 36000) * 1000);
+    var h = d.getUTCHours(), m = d.getUTCMinutes();
+    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+  }
+  function fmt1(v, suf) { return v == null ? '–' : v.toFixed(1) + suf; }
+
+  function renderStatsWindow() {
+    var b = brooderData, on = !!b;
+    $('bp-title').textContent = on ? 'Brooder' : 'Right now';
+    $('bp-day').hidden = !on;
+    $('bp-sub').hidden = !on;
+    $('bp-scene').hidden = !on;
+    $('bp-ribbon').hidden = !on;
+    $('bp-foot').hidden = !on;
+    $('statsdl').classList.toggle('bordered', on);
+    if (on) {
+      $('bp-day').textContent = 'DAY ' + b.day;
+      $('bp-sub').textContent = 'Hatched ' + b.hatched;
+      drawBrooderScene(b);
+      drawBrooderChart(b);
+      var foot = $('bp-foot');
+      foot.classList.toggle('stale', !b.alive);
+      $('bp-foot-t').textContent = (b.alive ? 'Sensor live' : 'Sensor quiet — showing last data')
+        + (b.battery >= 0 ? ' · battery ' + b.battery + '%' : '');
+    }
+    renderStats();
+  }
+
+  function drawBrooderScene(b) {
+    var s = $('bp-scene');
+    clearSvg(s);
+    var defs = svgEl(s, 'defs', {});
+    var core = svgEl(defs, 'radialGradient', { id: 'bpcore' });
+    svgEl(core, 'stop', { offset: 0, 'stop-color': 'rgba(255,209,102,.85)' });
+    svgEl(core, 'stop', { offset: .45, 'stop-color': 'rgba(240,140,40,.45)' });
+    svgEl(core, 'stop', { offset: 1, 'stop-color': 'rgba(200,70,15,0)' });
+    var ember = svgEl(defs, 'radialGradient', { id: 'bpember' });
+    svgEl(ember, 'stop', { offset: 0, 'stop-color': 'rgba(200,70,15,.5)' });
+    svgEl(ember, 'stop', { offset: 1, 'stop-color': 'rgba(120,30,8,0)' });
+    var underg = svgEl(defs, 'linearGradient', { id: 'bpunder', x1: 0, y1: 0, x2: 1, y2: 0 });
+    svgEl(underg, 'stop', { offset: 0, 'stop-color': 'rgba(255,170,60,.5)' });
+    svgEl(underg, 'stop', { offset: .55, 'stop-color': 'rgba(190,70,20,.22)' });
+    svgEl(underg, 'stop', { offset: 1, 'stop-color': 'rgba(120,30,8,0)' });
+    var eg = svgEl(defs, 'linearGradient', { id: 'bpelem', x1: 0, y1: 0, x2: 1, y2: 0 });
+    svgEl(eg, 'stop', { offset: 0, 'stop-color': 'rgba(255,190,80,.95)' });
+    svgEl(eg, 'stop', { offset: 1, 'stop-color': 'rgba(200,80,20,.35)' });
+
+    var BED = 152, bx = 56, fx = 248, byU = 128, fyU = 100;
+    svgEl(s, 'ellipse', { cx: 128, cy: BED - 10, rx: 130, ry: 40, fill: 'url(#bpember)' });
+    svgEl(s, 'ellipse', { cx: 92, cy: BED - 12, rx: 78, ry: 32, fill: 'url(#bpcore)' });
+    svgEl(s, 'polygon', { points: bx + ',' + byU + ' ' + fx + ',' + fyU + ' ' + fx + ',' + BED + ' ' + bx + ',' + BED,
+      fill: 'url(#bpunder)' });
+    svgEl(s, 'ellipse', { cx: 160, cy: BED + 3, rx: 150, ry: 5, fill: 'rgba(0,0,0,.4)' });
+
+    var slab = bx + ',' + (byU - 10) + ' ' + fx + ',' + (fyU - 10) + ' ' + fx + ',' + fyU + ' ' + bx + ',' + byU;
+    svgEl(s, 'polygon', { points: slab, fill: '#2c3038', stroke: '#2c3038',
+      'stroke-width': 9, 'stroke-linejoin': 'round' });
+    svgEl(s, 'polygon', { points: slab, fill: 'none', stroke: 'rgba(255,255,255,.18)',
+      'stroke-width': 1.2, 'stroke-linejoin': 'round' });
+    function screwLeg(x, top, color) {
+      svgEl(s, 'line', { x1: x + 11, y1: top - 3, x2: x + 11, y2: BED - 2,
+        stroke: '#1d2026', 'stroke-width': 3.5 });
+      svgEl(s, 'line', { x1: x, y1: top, x2: x, y2: BED, stroke: color, 'stroke-width': 5 });
+      for (var ry = top + 6; ry < BED - 4; ry += 7) {
+        svgEl(s, 'line', { x1: x - 3.4, y1: ry, x2: x + 3.4, y2: ry,
+          stroke: 'rgba(0,0,0,.35)', 'stroke-width': 1.6 });
+      }
+    }
+    screwLeg(bx + 8, byU, '#b09018');
+    screwLeg(fx - 8, fyU, '#7c5cae');
+    svgEl(s, 'line', { x1: bx + 12, y1: byU + 5, x2: fx - 12, y2: fyU + 5, stroke: 'url(#bpelem)',
+      'stroke-width': 2.4, 'stroke-dasharray': '8 5', 'stroke-linecap': 'round' });
+    svgTxt(s, (bx + fx) / 2, (byU + fyU) / 2 - 6, 'HEAT PAD',
+      { fill: 'rgba(255,255,255,.4)', 'font-size': 8.5, 'letter-spacing': '.22em', 'font-weight': 700,
+        'text-anchor': 'middle', transform: 'rotate(-8.3 ' + (bx + fx) / 2 + ' ' + ((byU + fyU) / 2 - 6) + ')' });
+
+    function chickEl(x, sc, peck, flip, lit) {
+      var y = BED - 12 * sc;
+      var c = svgEl(s, 'g', { transform: 'translate(' + x + ',' + y + ') scale(' + (flip ? -sc : sc) + ',' + sc + ')',
+        fill: '#0b0c0e', stroke: lit, 'stroke-width': 1.1 });
+      svgEl(c, 'ellipse', { cx: 0, cy: 0, rx: 13, ry: 9.5 });
+      if (peck) {
+        svgEl(c, 'circle', { cx: 12, cy: 5, r: 6 });
+        svgEl(c, 'polygon', { points: '17,7 22,10 16,10', stroke: 'none', fill: lit });
+      } else {
+        svgEl(c, 'circle', { cx: 10, cy: -10, r: 6 });
+        svgEl(c, 'polygon', { points: '15,-11 20,-9.5 15,-8', stroke: 'none', fill: lit });
+      }
+      svgEl(c, 'line', { x1: -3, y1: 9, x2: -3, y2: 13, stroke: '#0b0c0e', 'stroke-width': 2 });
+      svgEl(c, 'line', { x1: 3, y1: 9, x2: 3, y2: 13, stroke: '#0b0c0e', 'stroke-width': 2 });
+    }
+    chickEl(78, .72, false, true, 'rgba(255,200,90,.8)');
+    chickEl(114, .82, false, true, 'rgba(250,170,70,.65)');
+    chickEl(156, .9, false, false, 'rgba(220,110,40,.5)');
+    chickEl(290, .95, true, false, 'rgba(160,120,80,.4)');
+
+    // The readings, anchored to where they are measured. Stale radio = dim:
+    // the numbers are telegraf carry-forward, not fresh truth.
+    var dimmed = !b.alive;
+    var cRear = dimmed ? '#6a6f78' : '#ffd166';
+    var cFront = dimmed ? '#6a6f78' : '#e2703a';
+    var cur = b.current || {};
+    svgTxt(s, 78, 40, fmt1(cur.rear, '°'), { fill: cRear, 'font-size': 26, 'font-weight': 700, 'text-anchor': 'middle' });
+    svgTxt(s, 78, 54, 'REAR', { fill: '#7d8594', 'font-size': 8, 'letter-spacing': '.18em', 'font-weight': 700, 'text-anchor': 'middle' });
+    svgEl(s, 'line', { x1: 78, y1: 59, x2: 78, y2: byU - 20, stroke: 'rgba(255,209,102,.4)', 'stroke-width': 1.2 });
+    svgTxt(s, 226, 40, fmt1(cur.front, '°'), { fill: cFront, 'font-size': 26, 'font-weight': 700, 'text-anchor': 'middle' });
+    svgTxt(s, 226, 54, 'FRONT', { fill: '#7d8594', 'font-size': 8, 'letter-spacing': '.18em', 'font-weight': 700, 'text-anchor': 'middle' });
+    svgEl(s, 'line', { x1: 226, y1: 59, x2: 226, y2: fyU - 16, stroke: 'rgba(226,112,58,.5)', 'stroke-width': 1.2 });
+
+    // Ambient: temperature + pressure from chicky's BME280 (live over MQTT,
+    // already in /api/state), humidity from the Inkbird (the BME's is faulty).
+    var clim = (lastState && lastState.coop.has_climate) ? lastState.coop.climate : {};
+    svgTxt(s, 344, 34, 'AMBIENT', { fill: '#7d8594', 'font-size': 8, 'letter-spacing': '.18em', 'font-weight': 700, 'text-anchor': 'end' });
+    svgTxt(s, 344, 56, fmt1(clim.temperature, '°'), { fill: '#47a4a8', 'font-size': 17, 'font-weight': 700, 'text-anchor': 'end' });
+    svgTxt(s, 344, 76, cur.humidity == null ? '–' : Math.round(cur.humidity) + '%',
+      { fill: dimmed ? '#6a6f78' : '#a89f8f', 'font-size': 14, 'font-weight': 700, 'text-anchor': 'end' });
+    svgTxt(s, 344, 96, clim.pressure == null ? '–' : Math.round(clim.pressure) + ' hPa',
+      { fill: '#a89f8f', 'font-size': 11, 'font-weight': 600, 'text-anchor': 'end' });
+  }
+
+  function drawBrooderChart(b) {
+    var s = $('bp-chart'), tip = $('bp-tip'), plot = $('bp-plot');
+    clearSvg(s);
+    var S = b.series || {};
+    var REAR = S.rear || [], FRONT = S.front || [], AMB = S.ambient || [], RH = S.humidity || [];
+    var n = Math.max(REAR.length, FRONT.length, RH.length, AMB.length);
+    if (!n) { $('bp-ribbon').hidden = true; return; }
+    var W = 360, ML = 40, MR = 34;
+    var x = function (i) { return ML + (W - ML - MR) * i / (n - 1); };
+
+    function pool(arrs) {
+      var out = [];
+      arrs.forEach(function (a) { a.forEach(function (v) { if (v != null) out.push(v); }); });
+      return out;
+    }
+    var tvals = pool([REAR, FRONT, AMB]);
+    if (!tvals.length) { $('bp-ribbon').hidden = true; return; }
+    var tlo = Math.floor((Math.min.apply(null, tvals) - 1.5) / 5) * 5;
+    var thi = Math.ceil((Math.max.apply(null, tvals) + 1.5) / 5) * 5;
+    if (thi - tlo < 10) thi = tlo + 10;
+    var hvals = pool([RH]);
+    var hlo = hvals.length ? Math.floor((Math.min.apply(null, hvals) - 3) / 5) * 5 : 0;
+    var hhi = hvals.length ? Math.ceil((Math.max.apply(null, hvals) + 3) / 5) * 5 : 100;
+    if (hhi - hlo < 10) hhi = hlo + 10;
+
+    function band(top, h, lo, hi) {
+      return { top: top, h: h, y: function (v) { return top + h * (1 - (v - lo) / (hi - lo)); } };
+    }
+    var TB = band(6, 88, tlo, thi), HB = band(6, 88, hlo, hhi);
+
+    var tstep = (thi - tlo) <= 15 ? 5 : 10;
+    for (var g = Math.ceil((tlo + 1) / tstep) * tstep; g < thi; g += tstep) {
+      svgEl(s, 'line', { x1: ML, x2: W - MR, y1: TB.y(g), y2: TB.y(g), stroke: 'rgba(255,255,255,.06)', 'stroke-width': 1 });
+      svgTxt(s, ML - 4, TB.y(g) + 3, g + '°', { fill: '#7d8594', 'font-size': 8, 'text-anchor': 'end' });
+    }
+    if (hvals.length) {
+      for (var hv = Math.ceil((hlo + 1) / 10) * 10; hv < hhi; hv += 10) {
+        svgTxt(s, W - MR + 4, HB.y(hv) + 3, hv + '%', { fill: '#a89f8f', 'font-size': 8 });
+      }
+    }
+
+    // Null-aware: the pen lifts over a gap, because a gap is the sensor
+    // actually going silent and must not be drawn through.
+    function line(vals, bd, color, w, opts) {
+      opts = opts || {};
+      var d = '', pen = false, lastIdx = -1;
+      for (var i = 0; i < vals.length; i++) {
+        if (vals[i] == null) { pen = false; continue; }
+        d += (pen ? 'L' : 'M') + x(i).toFixed(1) + ' ' + bd.y(vals[i]).toFixed(1);
+        pen = true; lastIdx = i;
+      }
+      if (!d) return;
+      if (opts.area && lastIdx >= 0) {
+        svgEl(s, 'path', { d: d + 'L' + x(lastIdx).toFixed(1) + ' ' + (bd.top + bd.h)
+          + 'L' + ML + ' ' + (bd.top + bd.h) + 'Z', fill: color, opacity: .08 });
+      }
+      var at = { d: d, fill: 'none', stroke: color, 'stroke-width': w,
+        'stroke-linejoin': 'round', 'stroke-linecap': 'round' };
+      if (opts.dash) at['stroke-dasharray'] = opts.dash;
+      svgEl(s, 'path', at);
+      svgEl(s, 'circle', { cx: x(lastIdx), cy: bd.y(vals[lastIdx]), r: 2.6, fill: color,
+        stroke: '#1a1d22', 'stroke-width': 1.4 });
+    }
+    line(RH, HB, '#a89f8f', 1.6, { dash: '5 4', area: true });
+    line(AMB, TB, '#47a4a8', 2);
+    line(FRONT, TB, '#e2703a', 2);
+    line(REAR, TB, '#ffd166', 2);
+
+    for (var i = n - 1; i >= 0; i -= 12) {
+      svgTxt(s, x(i), 108, hhmmB(b.start + i * b.step), { fill: '#7d8594', 'font-size': 8, 'text-anchor': 'middle' });
+    }
+
+    var cross = svgEl(s, 'line', { x1: 0, x2: 0, y1: TB.top, y2: TB.top + TB.h,
+      stroke: 'rgba(255,255,255,.5)', 'stroke-width': 1, visibility: 'hidden' });
+    function tipRow(k, v) { return '<div class="r"><span>' + k + '</span><b>' + v + '</b></div>'; }
+    plot.onpointermove = function (ev) {
+      var r = s.getBoundingClientRect();
+      var px = (ev.clientX - r.left) / r.width * W;
+      if (px < ML || px > W - MR) return;
+      var i = Math.max(0, Math.min(n - 1, Math.round((px - ML) / (W - ML - MR) * (n - 1))));
+      cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i));
+      cross.setAttribute('visibility', 'visible');
+      tip.style.display = 'block';
+      // Numbers from our own API only, so innerHTML stays safe.
+      tip.innerHTML = '<b>' + hhmmB(b.start + i * b.step) + '</b>'
+        + tipRow('Rear', fmt1(REAR[i], '°'))
+        + tipRow('Front', fmt1(FRONT[i], '°'))
+        + (AMB.length ? tipRow('Ambient', fmt1(AMB[i], '°')) : '')
+        + tipRow('Humidity', RH[i] == null ? '–' : Math.round(RH[i]) + '%');
+      var left = x(i) / W * r.width + 10;
+      if (left + tip.offsetWidth > r.width) left = x(i) / W * r.width - tip.offsetWidth - 10;
+      tip.style.left = left + 'px'; tip.style.top = '-2px';
+    };
+    plot.onpointerleave = function () {
+      cross.setAttribute('visibility', 'hidden'); tip.style.display = 'none';
+    };
   }
 
   // ---------- console ----------
@@ -597,7 +877,16 @@
 
       renderTreat(s);
       renderLocks();
-      if ($('stats-modal').classList.contains('show')) renderStats();
+      if ($('stats-modal').classList.contains('show')) {
+        var prev = brooderData;
+        loadBrooder().then(function (cur) {
+          // Full redraw only on fresh data; between fetches just keep the
+          // ambient numbers and the rows moving with /api/state.
+          if (cur !== prev) { renderStatsWindow(); return; }
+          if (cur) drawBrooderScene(cur);
+          renderStats();
+        });
+      }
     }).catch(function () {});
   }
 

@@ -46,6 +46,7 @@ type App struct {
 	viewers   *Viewers
 	visitors  *Visitors
 	alltime   *PromCount
+	brooder   *Brooder
 	ptzLimit  *Limiter
 	lightLimit *Limiter
 	tmpl      *template.Template
@@ -196,6 +197,23 @@ func main() {
 		log.Printf("alltime: VISITORS_PROM_URL unset, all-time visitors disabled")
 	}
 
+	// The brooder panel: history for the heat-pad Inkbird and the ambient
+	// BME280, read back from the rf Prometheus. Off unless enabled, and the
+	// page falls back to the plain stats list whenever it is off or broken.
+	if env("BROODER_ENABLED", "false") == "true" {
+		hatch := time.Unix(int64(envInt("BROODER_HATCH_EPOCH", 0)), 0)
+		app.brooder = NewBrooder(
+			env("BROODER_PROM_URL", os.Getenv("VISITORS_PROM_URL")),
+			env("BROODER_CHANNEL", "ch3"),
+			hatch,
+		)
+		if app.brooder.Enabled() {
+			go app.brooder.Run(time.Duration(envInt("BROODER_POLL_SECONDS", 60)) * time.Second)
+		} else {
+			log.Printf("brooder: no Prometheus URL, panel disabled")
+		}
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", app.handleIndex)
 	// Assets are addressed with ?v=<version>, so they can be cached hard and
@@ -213,6 +231,7 @@ func main() {
 	mux.Handle("/metrics", promhttp.Handler())
 
 	mux.HandleFunc("/api/state", app.handleState)
+	mux.HandleFunc("/api/brooder", app.brooder.handle)
 	mux.HandleFunc("/api/verify", app.handleVerify)
 	mux.HandleFunc("/api/treat", app.handleTreat)
 	mux.HandleFunc("/api/light", app.handleLight)
