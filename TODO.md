@@ -24,7 +24,13 @@ already know we want.
       tag bumps in the GitOps repo.
 - [ ] Fix or delete the ChookVideoOriginRestarted alert: it watches
       process_start_time_seconds{job="chook-video"} but mediamtx exports no
-      such metric, so it can never fire (GitOps repo).
+      such metric, so it can never fire (GitOps repo). While there, add a
+      stream-staleness alert: the 2026-08-13 pusher hang left the stream dead
+      for 20 h with nothing firing.
+- [ ] Give stream-pusher's RTSP pull a read timeout (ffmpeg -timeout on the
+      input, GitOps repo): a silently dead camera session currently hangs
+      ffmpeg forever with the pod Running, instead of exiting into the
+      restart loop. Bit us 2026-08-13.
 - [ ] Stop serving /metrics through the public tunnel: chook.cam/metrics
       answers to anyone. Only command/session counters leak, but Prometheus
       scrapes in-cluster, so the public route serves nobody. Guard in the
