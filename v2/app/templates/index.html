@@ -485,7 +485,9 @@
     $('bp-title').textContent = on ? 'Brooder' : 'Right now';
     $('bp-day').hidden = !on;
     $('bp-sub').hidden = !on;
-    $('bp-scene').hidden = !on;
+    // toggleAttribute, not .hidden: SVGElement has no hidden property, so the
+    // assignment would be an expando and the [hidden] CSS would win forever.
+    $('bp-scene').toggleAttribute('hidden', !on);
     $('bp-ribbon').hidden = !on;
     $('bp-foot').hidden = !on;
     $('statsdl').classList.toggle('bordered', on);
