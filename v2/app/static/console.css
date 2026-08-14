@@ -38,7 +38,7 @@ body{
 .livechip{display:flex;align-items:center;gap:.35rem;font-size:.6rem;font-weight:700;
   letter-spacing:.16em;padding:.18rem .5rem;border-radius:999px;background:var(--live)}
 .livechip .dot{width:.4rem;height:.4rem;border-radius:50%;background:#fff}
-body.night .livechip{background:rgba(96,106,126,.85)}
+/* Stays red at night: the camera has IR, the stream never stops. */
 .meta{margin-left:auto;font-size:.78rem;font-weight:700;color:var(--ink);
   font-variant-numeric:tabular-nums}
 .meta .eye{width:1.05em;height:1.05em;vertical-align:-.18em}

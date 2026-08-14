@@ -64,7 +64,7 @@
       </div>
     </div>
   </div>
-  <div class="sleepchip">The chicks are asleep. <b>Back at sunrise.</b></div>
+  <div class="sleepchip">Sleep time, <b>some controls disabled.</b></div>
 </div>
 
 <!-- The verification modal. The first control press opens it with a spinner
@@ -769,7 +769,7 @@
       // this request stays open the whole time. Show it.
       busy = true;
       treat.classList.add('busy');
-      treatlbl.innerHTML = 'here it<br>comes';
+      treatlbl.innerHTML = 'dispensing&hellip;';
       if (TREAT_PRESET) { markView(TREAT_PRESET); ptzWait = 5; ptzTotal = 5; renderLocks(); }
       var done = function (r) {
         busy = false;
@@ -794,7 +794,7 @@
       // Someone else's treat is mid-flight; everyone sees the dial spin.
       treat.disabled = true;
       treat.classList.add('busy');
-      treatlbl.innerHTML = 'here it<br>comes';
+      treatlbl.innerHTML = 'dispensing&hellip;';
       return;
     }
     treat.classList.remove('busy');
