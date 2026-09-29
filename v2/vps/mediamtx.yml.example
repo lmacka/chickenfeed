@@ -73,6 +73,15 @@ authInternalUsers:
     permissions:
       - action: publish
         path: coop
+
+  # Second relayed stream (nest.omacks.com). Its own credential scoped to its
+  # own path, so neither publisher can evict the other's stream.
+  - user: nest-publisher
+    pass: CHANGEME
+    permissions:
+      - action: publish
+        path: nest
+
   # Metrics scrape, reachable only from localhost and the docker bridge.
   # nginx puts HTTP basic auth in front of it before it reaches the internet.
   - user: any
@@ -91,3 +100,9 @@ paths:
     # 1.19.3 panics with "reflect.Value.Addr of unaddressable value" when
     # descending into the paths map.
     srtPublishPassphrase: CHANGEME-set-a-real-passphrase
+
+  # Pure relay like coop: the publisher sends Constrained Baseline 720p,
+  # video only. maxReaders caps viewers to protect the 1 vCPU and bandwidth.
+  nest:
+    srtPublishPassphrase: CHANGEME-set-a-real-passphrase
+    maxReaders: 30
