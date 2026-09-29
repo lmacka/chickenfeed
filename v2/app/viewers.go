@@ -18,12 +18,16 @@ import (
 // receiving video (WebRTC and HLS both terminate there), so the count comes
 // from it rather than being inferred from page polls here.
 //
+// The origin relays more than one stream (coop, and nest.omacks.com since
+// 2026-09-29), so only sessions on this site's own path are counted.
+//
 // The poll runs server-side and the result is cached: clients get the number
 // through /api/state, which they already fetch every 2s, so the metrics
 // endpoint and its basic-auth credential never face the browser.
 
 type Viewers struct {
 	url    string
+	path   string
 	user   string
 	pass   string
 	client *http.Client
@@ -37,8 +41,8 @@ type Viewers struct {
 // Serving nothing beats serving a number the origin no longer backs.
 const viewersMaxAge = 30 * time.Second
 
-func NewViewers(url, user, pass string) *Viewers {
-	return &Viewers{url: url, user: user, pass: pass, client: &http.Client{Timeout: 5 * time.Second}}
+func NewViewers(url, path, user, pass string) *Viewers {
+	return &Viewers{url: url, path: path, user: user, pass: pass, client: &http.Client{Timeout: 5 * time.Second}}
 }
 
 func (v *Viewers) Enabled() bool { return v.url != "" }
@@ -85,15 +89,17 @@ func (v *Viewers) fetch() (int, error) {
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("metrics: http %d", resp.StatusCode)
 	}
-	return countReaders(io.LimitReader(resp.Body, 4<<20))
+	return countReaders(io.LimitReader(resp.Body, 4<<20), v.path)
 }
 
-// countReaders sums the stream-consuming sessions in a Prometheus exposition:
-// every webrtc_sessions series in the read state (WHIP publishers report
-// state="publish"), plus every hls_sessions series. Names must match exactly;
-// webrtc_sessions_* and hls_sessions_* byte counters share the prefix.
-func countReaders(r io.Reader) (int, error) {
+// countReaders sums the stream-consuming sessions on one path in a Prometheus
+// exposition: webrtc_sessions series in the read state (WHIP publishers report
+// state="publish"), plus hls_sessions series. Names must match exactly;
+// webrtc_sessions_* and hls_sessions_* byte counters share the prefix. Series
+// without the path label (mediamtx's zero-session placeholder) never match.
+func countReaders(r io.Reader, path string) (int, error) {
 	total := 0.0
+	onPath := `path="` + path + `"`
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	for sc.Scan() {
@@ -103,6 +109,9 @@ func countReaders(r io.Reader) (int, error) {
 		}
 		name, labels, value, ok := splitSeries(line)
 		if !ok {
+			continue
+		}
+		if !hasLabel(labels, onPath) {
 			continue
 		}
 		switch name {
@@ -147,4 +156,15 @@ func splitSeries(line string) (name, labels, value string, ok bool) {
 		value = f[0]
 	}
 	return name, labels, value, name != ""
+}
+
+// hasLabel reports whether a comma-separated label set contains the exact
+// pair, so path="coop" does not match path="coop2".
+func hasLabel(labels, pair string) bool {
+	for _, l := range strings.Split(labels, ",") {
+		if strings.TrimSpace(l) == pair {
+			return true
+		}
+	}
+	return false
 }

@@ -112,7 +112,7 @@ func main() {
 	app := &App{
 		turnstile:    NewTurnstile(os.Getenv("TURNSTILE_SECRET")),
 		sessions:     NewSessions(time.Duration(envInt("SESSION_TTL_HOURS", 12)) * time.Hour),
-		viewers:      NewViewers(os.Getenv("VIDEO_METRICS_URL"), os.Getenv("VIDEO_METRICS_USER"), os.Getenv("VIDEO_METRICS_PASS")),
+		viewers:      NewViewers(os.Getenv("VIDEO_METRICS_URL"), env("VIDEO_PATH", "coop"), os.Getenv("VIDEO_METRICS_USER"), os.Getenv("VIDEO_METRICS_PASS")),
 		visitors:     NewVisitors(env("COOP_TZ", "Australia/Brisbane")),
 		// The window is the rf instance's full retention: "all time" means
 		// "since counting began", within the 3 years Prometheus keeps.
