@@ -35,3 +35,6 @@ v2/app/chook-app
 # SWAG writes its own stock default.conf; only video.conf is ours
 v2/vps/swag-config/nginx/site-confs/default.conf
 v2/vps/swag-config/nginx/site-confs/default.conf.sample
+
+# remark42 runtime state (BoltDB, avatars) - container-generated.
+v2/vps/remark42-data/
