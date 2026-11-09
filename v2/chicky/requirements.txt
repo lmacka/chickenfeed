@@ -17,5 +17,5 @@ ads1x15-adc>=1.2.2
 
 # MQTT bridge to the cluster broker (coopi pattern) + sunrise/sunset for the
 # daylight gate. astral is pure Python, no wheels needed.
-paho-mqtt==2.1.0
+paho-mqtt==2.2.0
 astral==3.2
